@@ -9,7 +9,12 @@ function Clay({ color, position, scale }: { color: string, position: Vector3Tupl
 export function Bilbo() {
   return <group>
     <Clay color="#a6643c" position={[0, 0.89, 0]} scale={[0.31, 0.42, 0.22]} />
-    <Clay color="#c39b4a" position={[0, 0.92, 0.16]} scale={[0.18, 0.38, 0.085]} />
+    <Clay color="#d5ab52" position={[0, 0.92, 0.16]} scale={[0.18, 0.38, 0.085]} />
+    {[0.76, 0.91, 1.06].map(y => <Clay key={y} color="#774f2b" position={[0.034, y, 0.237]} scale={[0.02, 0.02, 0.015]} />)}
+    <mesh position={[-0.29, 0.52, 0.14]} rotation-z={-0.31} castShadow>
+      <cylinderGeometry args={[0.015, 0.024, 0.67, 8]} /><meshStandardMaterial color="#70452f" />
+    </mesh>
+    <Clay color="#875532" position={[-0.39, 0.21, 0.151]} scale={[0.055, 0.055, 0.043]} />
     {[-1, 1].map(side => <group key={side}>
       <Clay color="#6d6744" position={[side * 0.13, 0.30, 0]} scale={[0.128, 0.30, 0.15]} />
       <Clay color="#b98761" position={[side * 0.14, 0.075, 0.086]} scale={[0.127, 0.087, 0.21]} />
@@ -36,6 +41,8 @@ export function Gandalf() {
     </mesh>
     <Clay color="#7b817d" position={[0, 1.1, -0.045]} scale={[0.43, 0.35, 0.29]} />
     <Clay color="#c9a081" position={[0, 1.65, 0.017]} scale={[0.223, 0.25, 0.205]} />
+    <Clay color="#b8bdab" position={[0.009, 1.23, 0.11]} scale={[0.33, 0.112, 0.24]} />
+    <Clay color="#c3c4b1" position={[0.215, 0.99, 0.205]} scale={[0.078, 0.296, 0.059]} />
     <Clay color="#e2dfc7" position={[0, 1.36, 0.147]} scale={[0.235, 0.29, 0.145]} />
     <Clay color="#e1dac6" position={[0.057, 1.19, 0.151]} scale={[0.153, 0.25, 0.11]} />
     <Clay color="#c69977" position={[0, 1.63, 0.217]} scale={[0.057, 0.07, 0.058]} />
@@ -50,6 +57,9 @@ export function Gandalf() {
         <cylinderGeometry args={[0.015, 0.29, 0.58, 16]} /><meshStandardMaterial color="#526a80" roughness={0.87} />
       </mesh>
     </group>
+    <mesh position-x={0.36} position-y={1.14} position-z={0.195} rotation-x={Math.PI / 2}>
+      <torusGeometry args={[0.059, 0.017, 6, 14]} /><meshStandardMaterial color="#b8a17e" metalness={0.35} />
+    </mesh>
     <Clay color="#767b77" position={[0.35, 1.08, 0.06]} scale={[0.15, 0.2, 0.158]} />
     <Clay color="#c9a081" position={[0.49, 1.08, 0.16]} scale={[0.096, 0.108, 0.084]} />
     <mesh position={[0.51, 1.05, 0.16]} rotation-z={-0.06} castShadow>

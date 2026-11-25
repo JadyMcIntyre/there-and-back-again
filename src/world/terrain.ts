@@ -11,8 +11,8 @@ const ridge = [
   [17, -27, 12, 9, 11], [-12, -29, 11, 11, 11], [13, 17, 11, 7, 14],
 ]
 const anduin = [25, 27, 23, 25, 28, 26, 30, 34, 32, 37, 39]
-const westernRun = [-56, -45, -35, -26, -19, -13, -10]
-const westernZ = [24, 22, 27, 22, 17, 12, 5]
+const westernRun = [-59, -52, -45, -38, -31, -24, -17, -12, -8]
+const westernZ = [21, 19, 22, 30, 38, 31, 14, 4, -2]
 
 function interpolate(values: number[], position: number) {
   const index = Math.min(values.length - 2, Math.floor(clamp(position, 0, values.length - 1)))
@@ -30,7 +30,7 @@ export const westRiverWidth = (x: number) => mix(1.58, 0.94, smooth(-42, -10, x)
 
 function grassland(x: number, z: number) {
   const relief = grain(x * 0.065 + 5, z * 0.065) * 5 + noise(x * 0.15, z * 0.12) * 0.72
-  return 0.95 + relief + 1.7 * Math.exp(-((x + 49) ** 2 + (z - 1) ** 2) / 175)
+  return 0.95 + relief + 2.1 * Math.exp(-((x + 48) ** 2 + (z - 6) ** 2) / 175)
     + 1.5 * Math.exp(-((x - 54) ** 2 + (z + 16) ** 2) / 270)
 }
 
@@ -52,16 +52,20 @@ function mountain(x: number, z: number) {
 
 export function terrainHeight(x: number, z: number) {
   const peak = mountain(x, z)
-  const bed = grassland(x, z) + peak + (grain(x * 0.77, z * 0.71) - 0.48) * Math.min(2.5, 0.28 + peak * 0.19)
+  const gully = 2.45 * Math.exp(-((x + 12) ** 2 / 110 + (z - 2) ** 2 / 20))
+  const bed = grassland(x, z) + peak - gully + (grain(x * 0.77, z * 0.71) - 0.48) * Math.min(2.5, 0.28 + peak * 0.19)
   const eastCut = smooth(riverWidth(z) * 0.40, riverWidth(z) * 1.75, Math.abs(x - riverX(z)))
-  const westCut = x < -10 ? mix(1, smooth(westRiverWidth(x) * 0.4, westRiverWidth(x) * 2.4, Math.abs(z - westRiverZ(x))), 1 - smooth(-13, -10, x)) : 1
+  const westernChannel = x < -31 || (x > -24 && x < -8)
+  const westCut = westernChannel ? mix(1, smooth(westRiverWidth(x) * 0.49, westRiverWidth(x) * 2.4, Math.abs(z - westRiverZ(x))), 1 - smooth(-12, -8, x)) : 1
   return mix(0.05, bed, Math.min(eastCut, westCut))
 }
 
 export function forestDensity(x: number, z: number) {
-  const northeast = smooth(42, 53, x) * (1 - smooth(9, 29, z))
+  const forestEdge = mix(31, 49, smooth(-30, 15, z))
+  const northeast = smooth(forestEdge - 1, forestEdge + 12, x) * (1 - smooth(9, 29, z))
   const wildWoods = smooth(6, 15, x) * (1 - smooth(19, 25, x)) * 0.55
-  const westernWoods = (1 - smooth(-27, -19, x)) * smooth(-55, -45, x) * (1 - smooth(0, 13, z)) * 0.78
+  const hillClear = 1 - 0.76 * Math.exp(-((x + 48) ** 2 + (z - 8) ** 2) / 80)
+  const westernWoods = (1 - smooth(-27, -19, x)) * smooth(-55, -45, x) * (1 - smooth(0, 13, z)) * 0.78 * hillClear
   const southern = smooth(11, 29, z) * (1 - smooth(-25, -8, x)) * 0.25
   return clamp(northeast + wildWoods + westernWoods + southern + (noise(x * 0.19 + 9, z * 0.2) - 0.35) * 0.52)
 }
@@ -81,14 +85,21 @@ const scree = new Color('#888177')
 const granite = new Color('#606a67')
 const snow = new Color('#dce5db')
 const gravel = new Color('#998b62')
+const shire = new Color('#a3a96c')
+const riverMeadow = new Color('#a5a77b')
+const easternWood = new Color('#344e42')
+const seam = new Color('#666158')
 
 function landColor(x: number, y: number, z: number) {
   const variation = grain(x * 0.24, z * 0.24)
   const slope = Math.hypot(terrainHeight(x + 0.4, z) - terrainHeight(x - 0.4, z), terrainHeight(x, z + 0.4) - terrainHeight(x, z - 0.4))
   const color = meadow.clone().lerp(sage, smooth(0.22, 0.77, variation))
-  color.lerp(darkForest, forestDensity(x, z) * 0.54)
+  color.lerp(shire, (1 - smooth(-49, -32, x)) * (0.48 + variation * 0.21))
+  color.lerp(riverMeadow, smooth(16, 27, x) * (1 - smooth(35, 46, x)) * 0.68)
+  color.lerp(x > 37 ? easternWood : darkForest, forestDensity(x, z) * 0.65)
   color.lerp(gravel, 0.56 * (1 - smooth(0.48, 1.6, y)))
   color.lerp(scree.clone().lerp(granite, smooth(0.37, 0.68, variation)), smooth(5, 12, y + slope * 0.85))
+  color.lerp(seam, smooth(6, 14, y) * smooth(0.58, 0.95, noise(x * 0.44 + y * 0.32, z * 0.26)) * 0.5)
   color.lerp(snow, smooth(14, 22, y + variation * 5 - slope * 1.9))
   return color.multiplyScalar(mix(0.79, 1.18, noise(x * 1.23, z * 1.23)))
 }
@@ -148,7 +159,7 @@ export function makeWater(west: boolean) {
   const shades = ['#586f68', '#577d79', '#3d6c72', '#5a8179', '#697f72'].map(shade => new Color(shade))
   for (let i = 0; i <= 164; i++) {
     const t = i / 164
-    const axis = west ? mix(-56.7, -11.4, t) : mix(-34.3, 34.2, t)
+    const axis = west ? mix(-57.7, -9.4, t) : mix(-34.3, 34.2, t)
     const spread = west ? westRiverWidth(axis) : riverWidth(axis)
     for (let j = 0; j < shades.length; j++) {
       const offset = (j / (shades.length - 1) - 0.5) * spread * 1.16
@@ -156,7 +167,7 @@ export function makeWater(west: boolean) {
       const z = west ? westRiverZ(axis) + offset : axis
       points.push(x, 0.41 + 0.016 * Math.sin(t * 140 + j), z)
       shades[j].clone().multiplyScalar(mix(0.86, 1.16, noise(t * 120, j))).toArray(colors, colors.length)
-      if (i < 164 && j < shades.length - 1) {
+      if (i < 164 && j < shades.length - 1 && (!west || axis < -33 || axis > -24)) {
         const a = i * shades.length + j, b = a + shades.length
         indices.push(a, b, a + 1, a + 1, b, b + 1)
       }

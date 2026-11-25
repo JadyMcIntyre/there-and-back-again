@@ -1,20 +1,14 @@
-import { OrbitControls } from '@react-three/drei'
-import { Canvas, useThree } from '@react-three/fiber'
-import gsap from 'gsap'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Compass, LocateFixed, Minus, Plus } from 'lucide-react'
-import { Component, lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react'
-import { ACESFilmicToneMapping, MOUSE, OrthographicCamera, Vector3, type Vector3Tuple } from 'three'
-import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
+import { Component, Suspense, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { ACESFilmicToneMapping, type Vector3Tuple } from 'three'
 import type { Atlas } from '../content/spoilers'
 import type { Exhibit } from '../content/schema'
-import AtlasWorld, { markerPosition } from './AtlasWorld'
+import { scenes, type SceneId } from '../scenes/registry'
+import AtlasWorld from './AtlasWorld'
+import { atlasComposition, portraitAtlasComposition, CameraRig, type CameraHandle, type CameraPose } from './CameraRig'
 
-const sceneComponents = { 'bag-end': lazy(() => import('../scenes/BagEnd')) }
-type Command = { action: 'home' | 'in' | 'out' | 'rotate' | 'focus', time: number }
-const mapEye: Vector3Tuple = [16, 92, 115]
-const gardenEye: Vector3Tuple = [8.2, 10.7, 20.5]
-
-function useMedia(query: string) {
+export function useMedia(query: string) {
   const [matches, setMatches] = useState(() => window.matchMedia(query).matches)
   useEffect(() => {
     const media = window.matchMedia(query)
@@ -24,87 +18,6 @@ function useMedia(query: string) {
     return () => media.removeEventListener('change', update)
   }, [query])
   return matches
-}
-
-function CameraRig({ scene, command, focused, reduced, ready }: {
-  scene: boolean
-  command: Command
-  focused?: Vector3
-  reduced: boolean
-  ready: () => void
-}) {
-  const [controls, setControls] = useState<OrbitControlsImpl | null>(null)
-  const { camera, size, invalidate } = useThree()
-  const zoom = scene ? Math.min(size.width / 22.3, size.height / 15.85) : Math.min(size.width / 136, size.height / 74)
-  const centerHeight = scene ? 2.66 : 4.1
-  const eye = scene ? gardenEye : mapEye
-
-  useEffect(() => {
-    if (!controls || !(camera instanceof OrthographicCamera) || !zoom) return
-    const base = new Vector3(0, centerHeight, 0)
-    controls.target.copy(base)
-    camera.position.set(...eye)
-    camera.zoom = zoom
-    camera.updateProjectionMatrix()
-    controls.update()
-    invalidate()
-    ready()
-  }, [camera, centerHeight, controls, eye, invalidate, ready, zoom])
-
-  useEffect(() => {
-    if (!controls || !(camera instanceof OrthographicCamera) || command.time === 0) return
-    const position = camera.position.clone()
-    const target = controls.target.clone()
-    const home = new Vector3(0, centerHeight, 0)
-    let destinationZoom = camera.zoom
-    if (command.action === 'home') {
-      target.copy(home)
-      position.set(...eye)
-      destinationZoom = zoom
-    } else if (command.action === 'focus' && focused) {
-      target.copy(focused).lerp(home, 0.25)
-      position.sub(controls.target).add(target)
-      destinationZoom = Math.max(zoom * 1.26, camera.zoom)
-    } else if (command.action === 'in' || command.action === 'out') {
-      destinationZoom = Math.min(zoom * 3.45, Math.max(zoom * 0.7, camera.zoom * (command.action === 'in' ? 1.29 : 1 / 1.29)))
-    } else if (command.action === 'rotate') {
-      position.sub(target).applyAxisAngle(new Vector3(0, 1, 0), Math.PI / 6).add(target)
-    }
-    const finish = () => {
-      camera.updateProjectionMatrix()
-      controls.update()
-      invalidate()
-    }
-    if (reduced) {
-      controls.target.copy(target)
-      camera.position.copy(position)
-      camera.zoom = destinationZoom
-      finish()
-      return
-    }
-    const start = { position: camera.position.clone(), target: controls.target.clone(), zoom: camera.zoom }
-    const frame = { t: 0 }
-    const tween = gsap.to(frame, {
-      t: 1, duration: command.action === 'focus' ? 0.88 : 0.55, ease: 'power2.inOut',
-      onUpdate() {
-        camera.position.lerpVectors(start.position, position, frame.t)
-        controls.target.lerpVectors(start.target, target, frame.t)
-        camera.zoom = start.zoom + (destinationZoom - start.zoom) * frame.t
-        finish()
-      },
-    })
-    const cancel = () => tween.kill()
-    controls.addEventListener('start', cancel)
-    return () => {
-      cancel()
-      controls.removeEventListener('start', cancel)
-    }
-  }, [camera, centerHeight, command, controls, eye, focused, invalidate, reduced, zoom])
-
-  return <OrbitControls ref={setControls} makeDefault enableDamping={!reduced} dampingFactor={0.11}
-    minZoom={zoom * 0.7} maxZoom={zoom * 3.5} minPolarAngle={0.30} maxPolarAngle={scene ? 1.36 : 1.10}
-    rotateSpeed={0.66} panSpeed={0.89} zoomSpeed={0.68}
-    mouseButtons={{ LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN }} />
 }
 
 function Lighting({ scene, compact }: { scene: boolean, compact: boolean }) {
@@ -125,78 +38,85 @@ function Lighting({ scene, compact }: { scene: boolean, compact: boolean }) {
   </>
 }
 
-class ViewErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+class ViewErrorBoundary extends Component<{ children: ReactNode, fail: () => void }, { failed: boolean }> {
   state = { failed: false }
   static getDerivedStateFromError() { return { failed: true } }
+  componentDidCatch() { this.props.fail() }
   render() {
-    return this.state.failed ? <p className="view-status" role="status">The 3D view is unavailable on this device. Explore with the atlas list.</p> : this.props.children
+    return this.state.failed ? <p className="view-status" role="status">The 3D view is unavailable. Explore with the field notes.</p> : this.props.children
   }
 }
 
-export default function Viewport({ atlas, selected, select, scene, exhibits, inspect, exhibit, doorOpen, focus, className }: {
+function FirstFrame({ ready }: { ready: () => void }) {
+  const notified = useRef(false)
+  const frame = useRef(0)
+  const invalidate = useThree(state => state.invalidate)
+  useEffect(() => {
+    invalidate()
+    return () => cancelAnimationFrame(frame.current)
+  }, [invalidate])
+  useFrame(() => {
+    if (notified.current) return
+    notified.current = true
+    frame.current = requestAnimationFrame(ready)
+  })
+  return null
+}
+
+export function CameraButtons({ camera }: { camera: RefObject<CameraHandle | null> }) {
+  return <>
+    <button className="compass-control" type="button" aria-label="Rotate view" title="Rotate view" onClick={() => camera.current?.move('rotate')}>
+      <Compass size={23} strokeWidth={1.4} aria-hidden />
+    </button>
+    <div className="map-controls" aria-label="Camera controls">
+      <button type="button" title="Zoom in" aria-label="Zoom in" onClick={() => camera.current?.move('in')}><Plus size={18} /></button>
+      <button type="button" title="Zoom out" aria-label="Zoom out" onClick={() => camera.current?.move('out')}><Minus size={18} /></button>
+      <button type="button" title="Reset camera" aria-label="Reset camera" onClick={() => camera.current?.move('home')}><LocateFixed size={17} /></button>
+    </div>
+  </>
+}
+
+export default function Viewport({ atlas, selected, select, scene, exhibits, inspect, exhibit, doorOpen, camera,
+  initial, arriving, locked, panelOpen, reduced, ready, fail }: {
   atlas: Atlas
   selected?: string
   select: (id: string) => void
-  scene?: string
+  scene?: SceneId
   exhibits: Exhibit[]
   exhibit?: string
   inspect: (id: string) => void
   doorOpen: boolean
-  focus?: { id: string, time: number }
-  className?: string
+  camera: RefObject<CameraHandle | null>
+  initial?: CameraPose
+  arriving: boolean
+  locked: boolean
+  panelOpen: boolean
+  reduced: boolean
+  ready: () => void
+  fail: () => void
 }) {
+  const labelPortal = useRef<HTMLDivElement>(null)
   const compact = useMedia('(max-width: 760px)')
-  const reduced = useMedia('(prefers-reduced-motion: reduce)')
-  const [command, setCommand] = useState<Command>({ action: 'home', time: 0 })
-  const [focused, setFocused] = useState<Vector3>()
-  const [ready, setReady] = useState(false)
-  const markReady = useCallback(() => setReady(true), [])
-  const Scene = scene ? sceneComponents[scene as keyof typeof sceneComponents] : undefined
-
-  useEffect(() => {
-    if (!focus) return
-    const place = atlas.landmarks.find(item => item.id === focus.id)
-    if (!place) return
-    setFocused(markerPosition(place))
-    setCommand({ action: 'focus', time: focus.time })
-    // The caller changes the request only when a new camera move is triggered.
-  }, [focus, atlas.landmarks])
-
-  function move(action: Command['action']) {
-    setCommand({ action, time: performance.now() })
-  }
-
-  return <div className={`viewport ${Scene ? 'garden-viewport' : ''} ${className ?? ''}`} aria-label={Scene ? `Interactive ${atlas.landmarks.find(place => place.scene?.id === scene)?.name ?? 'location'} diorama` : 'Interactive atlas map'}>
+  const config = scene ? scenes[scene] : undefined
+  const Scene = config?.World
+  const composition = config?.camera ?? (compact ? portraitAtlasComposition : atlasComposition)
+  return <div className={`viewport ${Scene ? 'garden-viewport' : ''}`} aria-label={Scene ? 'Interactive Bag End diorama' : 'Interactive atlas map'}>
     <div className="map-grid" aria-hidden />
-    <div className="atlas-coordinates" aria-hidden><i /><i /><i /><i /></div>
-    <ViewErrorBoundary>
-      <Canvas orthographic camera={{ position: Scene ? gardenEye : mapEye, near: 0.1, far: 430 }}
-        dpr={compact ? [1, 1.35] : [1, 1.65]} shadows frameloop="demand"
+    <div ref={labelPortal} className="world-label-portal" />
+    <ViewErrorBoundary fail={fail}>
+      <Canvas orthographic camera={{ position: composition.eye, near: 0.1, far: 430 }}
+        dpr={compact ? [1, 1.25] : [1, 1.65]} shadows frameloop="demand"
         gl={{ antialias: true, alpha: true, toneMapping: ACESFilmicToneMapping }}
-        fallback={<p className="view-status" role="status">The 3D view needs WebGL. Explore with the atlas list.</p>}>
+        fallback={<p className="view-status" role="status">The 3D view needs WebGL. Explore with the field notes.</p>}>
         <Lighting scene={!!Scene} compact={compact} />
-        <CameraRig scene={!!Scene} command={command} focused={focused} reduced={reduced} ready={markReady} />
-        <Suspense fallback={<LoadingWorld />}>
-          {Scene ? <Scene compact={compact} exhibits={exhibits} selected={exhibit} select={inspect} doorOpen={doorOpen} reduced={reduced} />
-            : <AtlasWorld atlas={atlas} compact={compact} selected={selected} select={select} />}
+        <CameraRig scene={!!Scene} composition={composition} compact={compact} panelOpen={panelOpen} locked={locked}
+          reduced={reduced} handle={camera} initial={initial} arriving={arriving} />
+        <Suspense fallback={null}>
+          {Scene ? <Scene portal={labelPortal} compact={compact} exhibits={exhibits} selected={exhibit} select={inspect} doorOpen={doorOpen} reduced={reduced} />
+            : <AtlasWorld portal={labelPortal} atlas={atlas} compact={compact} selected={selected} select={select} />}
+          <FirstFrame ready={ready} />
         </Suspense>
       </Canvas>
     </ViewErrorBoundary>
-    {!ready && <span className="view-status" role="status">Drawing the atlas…</span>}
-    <button className="compass-control" type="button" aria-label="Rotate view" title="Rotate view" onClick={() => move('rotate')}>
-      <span>N</span><Compass size={30} strokeWidth={1} aria-hidden />
-    </button>
-    <div className="map-controls" aria-label="Camera controls">
-      <button type="button" title="Zoom in" aria-label="Zoom in" onClick={() => move('in')}><Plus size={18} /></button>
-      <button type="button" title="Zoom out" aria-label="Zoom out" onClick={() => move('out')}><Minus size={18} /></button>
-      <button type="button" title="Reset camera" aria-label="Reset camera" onClick={() => move('home')}><LocateFixed size={17} /></button>
-    </div>
-    <div className="map-legend">
-      {Scene ? <>Drag to orbit <b>·</b> Scroll to zoom</> : atlas.routes.length > 0 ? <><span className="route-sample" /> Company’s route</> : <>Drag to orbit <b>·</b> Scroll to zoom</>}
-    </div>
   </div>
-}
-
-function LoadingWorld() {
-  return <ambientLight intensity={0} />
 }

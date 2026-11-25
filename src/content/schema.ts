@@ -8,14 +8,23 @@ export type Position = z.infer<typeof positionSchema>
 export const at = (chapter: number, event = 0): Position => ({ chapter, event })
 
 const entry = z.object({ id: z.string().regex(/^[a-z0-9-]+$/), reveal: positionSchema })
-const fact = entry.extend({ text: z.string().min(1) })
+const pages = z.tuple([z.number().int().positive(), z.number().int().positive()])
+const fact = entry.extend({
+  text: z.string().min(1),
+  section: z.enum(['Appearance', 'Background', 'Developments']).optional(),
+  pages: pages.optional(),
+})
+const link = entry.extend({ target: z.string(), label: z.string(), pages: pages.optional() })
+const alias = entry.extend({ name: z.string(), pages: pages.optional() })
 const coordinate = z.tuple([z.number(), z.number()])
 const landmark = entry.extend({
   name: z.string(),
   region: z.string(),
-  point: coordinate,
+  point: coordinate.optional(),
   facts: z.array(fact).min(1),
   scene: entry.optional(),
+  links: z.array(link).optional(),
+  aliases: z.array(alias).optional(),
 })
 const exhibit = entry.extend({
   name: z.string(),
@@ -23,6 +32,9 @@ const exhibit = entry.extend({
   subtitle: z.string(),
   location: z.string(),
   facts: z.array(fact).min(1),
+  links: z.array(link).optional(),
+  aliases: z.array(alias).optional(),
+  portrait: entry.extend({ style: z.enum(['hobbit', 'wizard', 'dwarf', 'elf', 'bear', 'eagle', 'shadow', 'dragon', 'troll']) }).optional(),
 })
 const route = entry.extend({ points: z.array(coordinate).min(2) })
 const chapter = z.object({
@@ -30,8 +42,13 @@ const chapter = z.object({
   title: z.string(),
   reveal: positionSchema,
   completionEvent: z.number().int().positive().optional(),
-  milestones: z.array(entry.extend({ label: z.string() })),
-  recap: fact.optional(),
+  milestones: z.array(entry.extend({ label: z.string(), focus: link.optional() })),
+  focus: link.optional(),
+  recap: fact.extend({
+    events: z.array(fact).optional(),
+    remember: z.array(fact).optional(),
+    links: z.array(link).optional(),
+  }).optional(),
 })
 export const bookSchema = z.object({
   id: z.string(),
@@ -41,6 +58,8 @@ export const bookSchema = z.object({
   routes: z.array(route),
   exhibits: z.array(exhibit),
 })
+export type Fact = z.infer<typeof fact>
+export type EntryLink = z.infer<typeof link>
 export type Book = z.infer<typeof bookSchema>
 export type Landmark = z.infer<typeof landmark>
 export type Exhibit = z.infer<typeof exhibit>

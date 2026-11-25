@@ -32,20 +32,52 @@ export function SearchDialog({ atlas, close, navigate }: {
   atlas: Atlas, close: () => void, navigate: (view: 'atlas' | 'journal', id: string) => void
 }) {
   const [query, setQuery] = useState('')
-  const results = atlas.search(query)
+  const buttons = useRef<Array<HTMLButtonElement | null>>([])
+  const input = useRef<HTMLInputElement>(null)
+  const results = atlas.searchResults(query)
+  function open(index: number) {
+    const match = results[index]
+    if (!match) return
+    navigate('region' in match.item && match.item.point ? 'atlas' : 'journal', match.item.id)
+    close()
+  }
+  function group(match: (typeof results)[number]) {
+    if (match.score === 3) return 'Related notes'
+    if ('region' in match.item) return 'Locations'
+    return match.item.kind === 'object' ? 'Objects' : 'Characters'
+  }
   return <Modal name="Search the atlas" close={close}>
-    <label className="search-field"><Search size={18} /><input type="search" aria-label="Search discovered places and journal entries"
-      placeholder="Places, characters and objects" value={query} onChange={event => setQuery(event.target.value)} autoFocus /></label>
-    <div className="search-results">
-      {query.trim() && !results.length && <p role="status">No discoveries match your search.</p>}
-      {!query.trim() && <p>Search discoveries visible at your current exploration point.</p>}
-      {results.map(item => {
-        const isPlace = 'region' in item
-        const Icon = isPlace ? MapPin : item.kind === 'object' ? Package : UserRound
-        return <button key={item.id} type="button" onClick={() => { navigate(isPlace ? 'atlas' : 'journal', item.id); close() }}>
-          <Icon size={17} /><span>{item.name}<small>{isPlace ? item.region : item.subtitle}</small></span>
-        </button>
-      })}
+    <div onKeyDown={event => {
+      if (!results.length) return
+      if (event.key === 'Enter' && event.target === input.current) {
+        event.preventDefault()
+        open(0)
+      }
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+      event.preventDefault()
+      const index = buttons.current.findIndex(button => button === event.target)
+      const next = event.key === 'ArrowDown' ? Math.min(results.length - 1, index + 1) : index === -1 ? results.length - 1 : index - 1
+      if (next < 0) input.current?.focus()
+      else buttons.current[next]?.focus()
+    }}>
+      <label className="search-field"><Search size={18} /><input ref={input} type="search" aria-label="Search discovered places and journal entries"
+        aria-controls="atlas-search-results" placeholder="Places, characters and objects" value={query}
+        onChange={event => setQuery(event.target.value)} autoFocus /></label>
+      <div className="search-results" id="atlas-search-results">
+        {query.trim() && !results.length && <p role="status">No discoveries match your search.</p>}
+        {!query.trim() && <p>Search discoveries visible at your current exploration point.</p>}
+        {results.map((match, index) => {
+          const { item } = match
+          const isPlace = 'region' in item
+          const Icon = isPlace ? MapPin : item.kind === 'object' ? Package : UserRound
+          return <div key={item.id}>
+            {(!results[index - 1] || group(results[index - 1]) !== group(match)) && <h3 className="result-group">{group(match)}</h3>}
+            <button ref={node => { buttons.current[index] = node }} type="button" onClick={() => open(index)}>
+              <Icon size={17} /><span>{item.name}<small>{isPlace ? item.region : item.subtitle}</small></span>
+            </button>
+          </div>
+        })}
+      </div>
     </div>
   </Modal>
 }

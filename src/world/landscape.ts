@@ -4,8 +4,9 @@ import type { Plant } from './Brush'
 import { forestDensity, terrainHeight, withinLand } from './terrain'
 import { grain, random, smooth } from './math'
 
+const firs = ['#294b3e', '#385946', '#486952', '#53705b']
 const greens = ['#344d36', '#3f5d43', '#496b50', '#58714b', '#667f54', '#6b7c4c', '#7b854f']
-const deciduousGreens = ['#606e42', '#76874b', '#879250', '#929853', '#a0a15f']
+const deciduousGreens = ['#596c42', '#76874b', '#819552', '#a69255', '#9ba45f', '#72865c']
 
 function mergeParts(parts: BufferGeometry[]) {
   const result = mergeGeometries(parts)
@@ -42,13 +43,13 @@ export function plantForests(compact: boolean) {
       const elevationLimit = 9.2 - grain(dx * 0.41, dz * 0.41) * 3.2
       const turn = rng() * Math.PI * 2
       if (y > 1.6 && y < elevationLimit && rng() < forest * 0.85 + 0.022) {
-        const height = (0.53 + rng() * 0.92) * (0.92 + forest * 0.25)
+        const height = (0.53 + rng() ** 1.48 * 1.24) * (0.92 + forest * 0.25)
         const width = height * (0.79 + rng() * 0.31)
         const position: Plant['position'] = [dx, y - 0.11, dz]
         const scale: Plant['scale'] = [width, height, width]
         const deciduous = dx < -17 ? 0.7 : dx > 29 ? 0.29 : 0.09
         const leaves = rng() < deciduous ? crowns : pines
-        const palette = leaves === crowns ? deciduousGreens : greens
+        const palette = leaves === crowns ? deciduousGreens : dx > 36 ? firs : greens
         leaves.push({ position, scale, turn, color: palette[Math.floor(rng() * palette.length)] })
         trunks.push({ position, scale, turn, color: '#664c35' })
       } else if (y > 5.4 && y < 16 && rng() < 0.1) {

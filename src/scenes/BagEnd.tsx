@@ -2,9 +2,9 @@ import { Html } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
 import gsap from 'gsap'
 import { DoorOpen, UserRound } from 'lucide-react'
-import { Suspense, useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, type RefObject } from 'react'
 import {
-  BufferAttribute, BufferGeometry, CatmullRomCurve3, DoubleSide, DodecahedronGeometry,
+  BufferAttribute, BufferGeometry, CatmullRomCurve3, Color, DoubleSide, DodecahedronGeometry,
   ExtrudeGeometry, Path, Shape, Vector3, type Group, type Vector3Tuple,
 } from 'three'
 import type { Exhibit } from '../content/schema'
@@ -12,6 +12,7 @@ import { Instances, type Plant } from '../world/Brush'
 import { grain, random } from '../world/math'
 import { Model } from '../world/Models'
 import { Bilbo, Gandalf } from './Figures'
+import { BagEndThreshold } from './interiors/BagEndThreshold'
 import { gardenHeight, gardenPlants, grassGeometry, makeGarden, pathCenter } from './garden'
 
 const facadeZ = 0.84
@@ -58,7 +59,7 @@ function gardenPosition(x: number, z: number): Vector3Tuple {
 }
 
 function GardenDetails() {
-  return <Suspense fallback={null}>
+  return <>
     <Model file="kenney/fence.glb" position={gardenPosition(-3.4, 5.2)} scale={1.25} turn={0.15} />
     <Model file="kenney/fence-gate.glb" position={gardenPosition(-1.8, 5.2)} scale={1.23} turn={0.06} />
     <Model file="kenney/fence.glb" position={gardenPosition(4.6, 5.2)} scale={1.32} turn={-0.19} />
@@ -67,7 +68,7 @@ function GardenDetails() {
       <Model key={x} file="quaternius/Bush_Flowers.gltf" position={gardenPosition(x, z)} scale={0.55 + i * 0.075} turn={i} />)}
     {[[-2.1, 2.7], [1.7, 3.4], [-4.35, 3.7], [5, 2.65]].map(([x,z], i) =>
       <Model key={x} file="quaternius/Flower_1_Clump.gltf" position={gardenPosition(x, z)} scale={0.86} turn={i * 0.7} />)}
-  </Suspense>
+  </>
 }
 
 function Branch({ points, radius, color }: { points: Vector3Tuple[], radius: number, color: string }) {
@@ -121,18 +122,22 @@ function makeWall() {
   return new ExtrudeGeometry(shape, { depth: 0.32, bevelEnabled: true, bevelThickness: 0.044, bevelSize: 0.047, bevelSegments: 2, curveSegments: 36 })
 }
 
+function roofHeight(x: number, z: number, t: number) {
+  const edge = archTop(x) + 0.13 + Math.sin(t * Math.PI) * 0.25
+  return edge * (1 - t) + gardenHeight(x, z) * t + (grain(x * 1.9, z * 2.8) - 0.4) * 0.26
+}
+
 function makeSodRoof() {
-  const pts: number[] = [], index: number[] = []
+  const pts: number[] = [], index: number[] = [], colors: number[] = []
+  const moss = new Color('#697e46'), straw = new Color('#a1a359')
   const bands = 14, points = 100
   for (let s = 0; s <= bands; s++) {
     const t = s / bands
     for (let i = 0; i <= points; i++) {
       const x = -5.5 + i / points * 11
       const z = facadeZ + 0.21 - t * 3.1
-      const height = archTop(x) + 0.13 + Math.sin(t * Math.PI) * 0.25
-      const ground = gardenHeight(x, z)
-      const y = height * (1 - t) + ground * t + (grain(x * 1.9, z * 2.8) - 0.4) * 0.26
-      pts.push(x, y, z)
+      pts.push(x, roofHeight(x, z, t), z)
+      moss.clone().lerp(straw, grain(x * 1.4, z * 2.6) * 0.64).toArray(colors, colors.length)
       if (s < bands && i < points) {
         const a = s * (points + 1) + i, b = a + points + 1
         index.push(a, a + 1, b, b, a + 1, b + 1)
@@ -142,8 +147,21 @@ function makeSodRoof() {
   const geometry = new BufferGeometry()
   geometry.setAttribute('position', new BufferAttribute(new Float32Array(pts), 3))
   geometry.setIndex(index)
+  geometry.setAttribute('color', new BufferAttribute(new Float32Array(colors), 3))
   geometry.computeVertexNormals()
   return geometry
+}
+
+function roofFoliage() {
+  const rng = random(18)
+  const shades = ['#7d8f4f', '#586c3f', '#8b985b', '#a3ab68']
+  return Array.from({ length: 240 }, (): Plant => {
+    const x = (rng() - 0.5) * 10.68, t = 0.05 + rng() * 0.77
+    const z = facadeZ + 0.21 - t * 3.1
+    const size = 0.35 + rng() * 0.48
+    return { position: [x, roofHeight(x, z, t) - 0.018, z], scale: [size, size, size], turn: rng() * 6.28,
+      color: shades[Math.floor(rng() * shades.length)] }
+  })
 }
 
 function StoneRing({ radius, width, position, blocks }: { radius: number, width: number, position: Vector3Tuple, blocks: number }) {
@@ -229,14 +247,7 @@ function RoundDoor({ open, reduced, select }: { open: boolean, reduced: boolean,
 
   return <group position={doorCenter}>
     <StoneRing radius={1.24} width={0.265} position={[0,0,-0.10]} blocks={22} />
-    <Disk radius={1.246} depth={0.12} color="#4a3525" z={-0.072} />
-    {open && <group position-z={-0.003} scale={0.94}>
-      <mesh><circleGeometry args={[1.18, 56]} /><meshStandardMaterial color="#8d512e" emissive="#ac5b23" emissiveIntensity={0.22} /></mesh>
-      {[0.96, 0.76, 0.56].map((r, i) => <mesh key={r} position={[i * 0.07, -0.22, 0.008 * (i + 1)]}>
-        <torusGeometry args={[r, 0.025, 8, 36]} /><meshStandardMaterial color="#b9824b" emissive="#cf8b43" emissiveIntensity={0.2} />
-      </mesh>)}
-      <mesh position={[0.13, -0.05, 0.036]}><circleGeometry args={[0.47, 32]} /><meshStandardMaterial color="#563326" /></mesh>
-    </group>}
+    <BagEndThreshold />
     <group ref={pivot} position={[-1.11, 0, 0.051]}>
       <group position-x={1.11} onClick={select ? event => { event.stopPropagation(); select() } : undefined}>
         {planks.map((geometry, i) => <mesh key={i} geometry={geometry} castShadow receiveShadow>
@@ -265,16 +276,19 @@ function Chimney() {
 function House({ open, reduced, select }: { open: boolean, reduced: boolean, select?: () => void }) {
   const wall = useMemo(makeWall, [])
   const roof = useMemo(makeSodRoof, [])
+  const grass = useMemo(grassGeometry, [])
+  const tufts = useMemo(roofFoliage, [])
   const trim = useMemo(() => Array.from({ length: 69 }, (_, i): Vector3Tuple => {
     const x = -5.38 + i / 68 * 10.76
     return [x, archTop(x) - 0.025, facadeZ + 0.18]
   }), [])
-  useEffect(() => () => { wall.dispose(); roof.dispose() }, [wall, roof])
+  useEffect(() => () => { wall.dispose(); roof.dispose(); grass.dispose() }, [wall, roof, grass])
   return <>
     <mesh position-z={facadeZ - 0.2} castShadow receiveShadow geometry={wall}>
       <meshStandardMaterial color="#c2a789" roughness={0.92} />
     </mesh>
-    <mesh geometry={roof} castShadow receiveShadow><meshStandardMaterial color="#677544" roughness={0.98} side={DoubleSide} /></mesh>
+    <mesh geometry={roof} castShadow receiveShadow><meshStandardMaterial vertexColors roughness={0.98} side={DoubleSide} /></mesh>
+    <Instances geometry={grass} plants={tufts} shadows={false}><meshStandardMaterial roughness={0.98} side={DoubleSide} /></Instances>
     <Branch points={trim} radius={0.119} color="#675038" />
     <Branch points={trim.map(([x,y,z]) => [x, y + 0.17, z - 0.063])} radius={0.13} color="#78844b" />
     {[-4.65, -2.02, 2.02, 4.65].map(x => <mesh key={x} position={[x, (archTop(x) - 0.1) / 2, facadeZ + 0.135]} castShadow>
@@ -292,7 +306,7 @@ const placements = {
   gandalf: { base: gardenPosition(2.98, 2.85), turn: -0.15, label: 3.04 },
   'green-door': { base: doorCenter, turn: 0, label: 1.56 },
 }
-function SceneExhibit({ item, active, select }: { item: Exhibit, active: boolean, select: () => void }) {
+function SceneExhibit({ item, active, select, portal }: { item: Exhibit, active: boolean, select: () => void, portal: RefObject<HTMLDivElement | null> }) {
   const placement = placements[item.id as keyof typeof placements]
   if (!placement) return null
   const { base, turn, label } = placement
@@ -301,7 +315,7 @@ function SceneExhibit({ item, active, select }: { item: Exhibit, active: boolean
     {item.kind === 'character' && <group onClick={event => { event.stopPropagation(); select() }}>
       {item.id === 'bilbo' ? <Bilbo /> : <Gandalf />}
     </group>}
-    <Html center position={[0, label, 0]} zIndexRange={active ? [24, 20] : [16, 4]} className="marker-anchor">
+    <Html portal={portal as RefObject<HTMLElement>} center position={[0, label, 0]} zIndexRange={active ? [24, 20] : [16, 4]} className="marker-anchor">
       <button type="button" className={`map-pin named scene-pin ${active ? 'active' : ''}`}
         aria-label={`Inspect ${item.name}`} aria-pressed={active} onClick={select}>
         <span><Icon size={12} aria-hidden /></span><strong>{item.name}</strong>
@@ -310,8 +324,9 @@ function SceneExhibit({ item, active, select }: { item: Exhibit, active: boolean
   </group>
 }
 
-export default function BagEnd({ compact, exhibits, selected, select, doorOpen, reduced }: {
+export default function BagEnd({ compact, exhibits, selected, select, doorOpen, reduced, portal }: {
   compact: boolean
+  portal: RefObject<HTMLDivElement | null>
   exhibits: Exhibit[]
   selected?: string
   select: (id: string) => void
@@ -327,6 +342,6 @@ export default function BagEnd({ compact, exhibits, selected, select, doorOpen, 
     <OrchardTree position={gardenPosition(7.08, 2.43)} scale={0.68} autumn />
     <House open={doorOpen && canInspectDoor} reduced={reduced} select={canInspectDoor ? () => select('green-door') : undefined} />
     <GardenDetails />
-    {exhibits.map(item => <SceneExhibit key={item.id} item={item} active={item.id === selected} select={() => select(item.id)} />)}
+    {exhibits.map(item => <SceneExhibit key={item.id} portal={portal} item={item} active={item.id === selected} select={() => select(item.id)} />)}
   </>
 }
