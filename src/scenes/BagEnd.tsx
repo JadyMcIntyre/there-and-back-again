@@ -12,6 +12,8 @@ import { Instances, type Plant } from '../world/Brush'
 import { grain, random } from '../world/math'
 import { Model } from '../world/Models'
 import { Bilbo, Gandalf } from './Figures'
+import { ChimneySmoke } from './ChimneySmoke'
+import type { SceneProps } from './sceneProps'
 import { BagEndThreshold } from './interiors/BagEndThreshold'
 import { gardenHeight, gardenPlants, grassGeometry, makeGarden, pathCenter } from './garden'
 
@@ -324,15 +326,7 @@ function SceneExhibit({ item, active, select, portal }: { item: Exhibit, active:
   </group>
 }
 
-export default function BagEnd({ compact, exhibits, selected, select, doorOpen, reduced, portal }: {
-  compact: boolean
-  portal: RefObject<HTMLDivElement | null>
-  exhibits: Exhibit[]
-  selected?: string
-  select: (id: string) => void
-  doorOpen: boolean
-  reduced: boolean
-}) {
+export default function BagEnd({ compact, exhibits, selected, select, doorOpen, reduced, portal, active }: SceneProps) {
   const canInspectDoor = exhibits.some(item => item.id === 'green-door')
   return <>
     <Garden compact={compact} />
@@ -340,6 +334,7 @@ export default function BagEnd({ compact, exhibits, selected, select, doorOpen, 
     <OrchardTree position={gardenPosition(-7.75, -0.1)} scale={0.85} autumn />
     <OrchardTree position={gardenPosition(6.65, -2.28)} scale={0.97} />
     <OrchardTree position={gardenPosition(7.08, 2.43)} scale={0.68} autumn />
+    <ChimneySmoke animate={active && !reduced && !compact} />
     <House open={doorOpen && canInspectDoor} reduced={reduced} select={canInspectDoor ? () => select('green-door') : undefined} />
     <GardenDetails />
     {exhibits.map(item => <SceneExhibit key={item.id} portal={portal} item={item} active={item.id === selected} select={() => select(item.id)} />)}

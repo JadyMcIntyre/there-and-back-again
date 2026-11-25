@@ -8,7 +8,7 @@ function place(id: string, name: string, region: string, point: Coordinate | und
 
 const bagEnd = place('bag-end', 'Bag End', 'Hobbiton', [-48, 7], 1, 1, [25, 26],
   'At the top of the Hill in Hobbiton, a round green door opens into the comfortable home of Bilbo Baggins.')
-bagEnd.scene = { id: 'bag-end', reveal: at(1, 1) }
+bagEnd.scene = { id: 'bag-end', reveal: at(1, 1), rooms: [{ id: 'bag-end-interior', reveal: at(1, 1) }] }
 bagEnd.facts.push(note('unexpected-company', 1, 2, [27, 34], 'A quiet evening gives way to unexpected callers, music, and talk of a journey.'))
 bagEnd.links = [reference('bilbo', 'Lives here', 1, 1), reference('green-door', 'Entrance', 1, 1), reference('thorin', 'Leads the visiting company', 1, 2)]
 
@@ -69,7 +69,7 @@ export const hobbit: Book = bookSchema.parse({
     place('eagles-eyrie', 'The Eagles’ Eyries', 'Eastern crags', [16, -11], 6, 3, [93, 95], 'The eagles bring the company to rough ledges on the mountain, where they have supper and wait for morning.'),
     place('carrock', 'The Carrock', 'The Great River', [26.4, -1], 7, 1, [96, 98], 'A great rock rises in the river. The eagles set the company down there, and steps lead to a ford.'),
     place('beorn', 'Beorn’s House', 'The wild country', [37, -8], 7, 1, [97, 105], 'East of the Great River, Beorn’s timber house stands inside a high hedge among gardens, pastures and beehives.'),
-    forestGate,
+    { ...forestGate, encounter: at(7, 3) },
   ],
   routes: [
     { id: 'bywater-road', reveal: at(2, 1), points: [[-48, 7], [-48, 12], [-45, 16], [-43, 18]] },
@@ -93,5 +93,9 @@ export const enhancedEdition = editionSchema.parse({
   id: 'enhanced-local-pdf',
   bookId: hobbit.id,
   name: 'Enhanced Edition',
-  chapterStarts: { 1: 25, 2: 42, 3: 54, 4: 61, 5: 70, 6: 84, 7: 96, 8: 113 },
+  storyEndPage: 209,
+  chapterStarts: {
+    1: 25, 2: 42, 3: 54, 4: 61, 5: 70, 6: 84, 7: 96, 8: 113, 9: 130, 10: 141,
+    11: 149, 12: 155, 13: 168, 14: 175, 15: 181, 16: 188, 17: 192, 18: 199, 19: 204,
+  },
 })

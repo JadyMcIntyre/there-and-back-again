@@ -23,6 +23,13 @@ self.addEventListener('activate', event => {
   )).then(() => self.clients.claim()))
 })
 
+self.addEventListener('message', event => {
+  if (event.data !== 'atlas-offline-status' || !event.ports[0]) return
+  event.waitUntil(caches.open(CACHE).then(cache => cache.match('/index.html')).then(
+    cached => event.ports[0].postMessage(cached ? 'atlas-cached' : 'atlas-pending')
+  ))
+})
+
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url)
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return

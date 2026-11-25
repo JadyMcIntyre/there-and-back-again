@@ -1,21 +1,20 @@
 import {
-  ArrowLeft, BookOpen, Bookmark, ChevronRight, Compass, LocateFixed, Map, Maximize, Minimize, NotebookPen, Search,
+  ArrowLeft, BookOpen, Bookmark, ChevronLeft, ChevronRight, Compass, LocateFixed, Lock, Map, Maximize, Minimize, NotebookPen, Search,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { enhancedEdition, hobbit } from '../content/hobbit'
-import { initialProgress, useProgress } from '../content/progress'
+import { useProgress } from '../content/progress'
+import { chapterSlots, completeEvent } from '../content/reading'
 import { at, type Position } from '../content/schema'
-import { chapterPlace, comparePosition, historicalPosition, resolveDestination, visibleAtlas, type Atlas, type Destination } from '../content/spoilers'
+import { chapterPlace, comparePosition, historicalPosition, resolveDestination, scenePlace, visibleAtlas, type Atlas, type Destination } from '../content/spoilers'
 import { sceneId, scenes } from '../scenes/registry'
 import type { CameraPose } from '../world/CameraRig'
-import WorldStage from '../world/WorldStage'
+import WorldStage, { type World } from '../world/WorldStage'
 import { BookmarkDialog, SearchDialog } from './Dialogs'
 import { AtlasPanel, ScenePanel } from './FieldNotes'
 import Journal from './Journal'
 import { atlasLink, navigateTo, type LinkTo } from './navigation'
 import { roman } from './Roman'
-
-const supported = visibleAtlas(hobbit, initialProgress.position)
 
 function useHash() {
   const [hash, setHash] = useState(window.location.hash)
@@ -51,24 +50,39 @@ function Header({ view, position, pdfPage, openBookmark, href, search }: {
 function Timeline({ progress, exploration, chapters, select, reset }: {
   progress: Position, exploration?: Position, chapters: Atlas['chapters'], select: (position: Position) => void, reset: () => void
 }) {
-  const read = chapters.filter(chapter => chapter.completionEvent !== undefined
-    && comparePosition(at(chapter.number, chapter.completionEvent), progress) <= 0).length
+  const slots = chapterSlots(progress, chapters)
+  const read = slots.filter(chapter => chapter.complete).length
   const active = exploration ?? progress
+  const strip = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const row = strip.current
+    const current = row?.querySelector<HTMLElement>('.active')
+    if (!current || !row) return
+    row.scrollLeft = current.offsetLeft - (row.clientWidth - current.offsetWidth) / 2
+  }, [active.chapter])
   return <section className="timeline" aria-labelledby="timeline-title">
     <div className="timeline-heading">
       <div><h2 id="timeline-title">Chapter trail</h2><span>{read} {read === 1 ? 'chapter' : 'chapters'} read</span></div>
-      {exploration ? <button className="text-button" type="button" onClick={reset}><LocateFixed size={15} /> Return to bookmark</button>
-        : <span className="trail-bookmark"><Bookmark size={13} /> At your bookmark</span>}
+      <div className="trail-tools">
+        {exploration ? <button className="text-button" type="button" onClick={reset}><LocateFixed size={15} /> Return to bookmark</button>
+          : <span className="trail-bookmark"><Bookmark size={13} /> At your bookmark</span>}
+        <div className="trail-scroll">
+          <button type="button" aria-label="Earlier chapters" onClick={() => strip.current?.scrollBy({ left: -340 })}><ChevronLeft size={15} /></button>
+          <button type="button" aria-label="Later chapters" onClick={() => strip.current?.scrollBy({ left: 340 })}><ChevronRight size={15} /></button>
+        </div>
+      </div>
     </div>
-    <div className="chapter-strip" aria-label="Explore chapters">
-      {chapters.map(chapter => {
-        const complete = chapter.completionEvent !== undefined && comparePosition(at(chapter.number, chapter.completionEvent), progress) <= 0
+    <div className="chapter-strip full-trail" ref={strip} aria-label="Explore chapters">
+      {slots.map(chapter => {
         const isActive = chapter.number === active.chapter
-        const target = chapter.number === progress.chapter ? progress : at(chapter.number, chapter.completionEvent ?? 0)
-        return <button key={chapter.number} type="button" onClick={() => select(target)} aria-pressed={isActive} aria-label={`${roman(chapter.number)} ${chapter.title}`} title={chapter.title}
-          className={`chapter-stop ${isActive ? 'active' : ''} ${complete ? 'complete' : ''}`}>
+        const label = chapter.title ? `${roman(chapter.number)} ${chapter.title}`
+          : `Chapter ${roman(chapter.number)}${chapter.unlocked ? '' : ' · Undiscovered'}`
+        return <button key={chapter.number} type="button" disabled={!chapter.unlocked}
+          onClick={() => select(chapter.target)} aria-pressed={isActive} aria-label={label} title={label}
+          className={`chapter-stop ${isActive ? 'active' : ''} ${chapter.complete ? 'complete' : ''} ${chapter.unlocked ? '' : 'locked'}`}>
           <span className="chapter-numeral">{roman(chapter.number)}</span>
-          <span className="chapter-label">{chapter.title}</span>
+          {chapter.title && <span className="chapter-label">{chapter.title}</span>}
+          {!chapter.unlocked && <Lock size={10} aria-hidden />}
           {isActive && <span className="chapter-dot" aria-hidden />}
         </button>
       })}
@@ -90,21 +104,27 @@ export default function App() {
   const lastView = useRef<Destination['view'] | undefined>(undefined)
   const lastExploredChapter = useRef<number | undefined>(undefined)
   const progress = bookmark.position
-  const chapters = useMemo(() => visibleAtlas(hobbit, progress).chapters, [progress])
+  const knowledge = useMemo(() => visibleAtlas(hobbit, progress), [progress])
+  const chapters = knowledge.chapters
   const chapterQuery = hash.split('?')[1] ?? ''
   const exploration = useMemo(() => historicalPosition(`?${chapterQuery}`, progress, chapters), [chapterQuery, progress, chapters])
   const atlas = useMemo(() => visibleAtlas(hobbit, progress, exploration), [progress, exploration])
-  const destination = resolveDestination(hash, atlas)
+  const destination = resolveDestination(hash, atlas, knowledge)
   const desired = destination.view === 'scene' ? sceneId(destination.id) ?? 'atlas' : 'atlas'
   const chapterContext = exploration && atlas.chapters.find(entry => entry.number === exploration.chapter)
   const knownSelection = atlas.landmarks.find(place => place.id === atlasSelection.current)?.id
-  const chapterSelection = chapterContext ? chapterPlace(atlas, exploration) : undefined
+  const chapterSelection = exploration ? chapterPlace(atlas, exploration) : undefined
   const selected = destination.view === 'atlas'
     ? destination.id ?? chapterSelection ?? knownSelection ?? atlas.landmarks[0]?.id
-    : knownSelection ?? atlas.landmarks.find(entry => entry.scene?.id === desired)?.id
+    : knownSelection ?? scenePlace(atlas, desired)?.id
   const href = useCallback<LinkTo>((view, id) => atlasLink(view, id, exploration), [exploration])
+  const journalHref: LinkTo = (view, id) => {
+    if (view === 'atlas' && id && !atlas.landmarks.some(place => place.id === id) ||
+      view === 'scene' && !scenePlace(atlas, id)) return atlasLink(view, id)
+    return href(view, id)
+  }
   const back = href('atlas', knownSelection ?? selected)
-  const cancel = useCallback(() => navigateTo(back), [back])
+  const cancel = useCallback((origin: World) => navigateTo(origin === 'atlas' ? back : href('scene', origin)), [back, href])
   const inJournal = destination.view === 'journal'
   const scenePanelOpen = notesOpen && !immersive
 
@@ -166,7 +186,7 @@ export default function App() {
       setFocus({ id, time: performance.now() })
       setNotesOpen(true)
     }
-    navigateTo(href(view, id))
+    navigateTo(journalHref(view, id))
   }
 
   const trail = <Timeline progress={progress} exploration={exploration} chapters={chapters} select={setTrail} reset={() => setTrail()} />
@@ -182,23 +202,26 @@ export default function App() {
       {inJournal ? <>
         <div className="journal-masthead"><div className="eyebrow">{hobbit.title} · {enhancedEdition.name}</div>
           <h1>The Reader’s Journal</h1>
-          {chapterContext && <button className="historical-pill" type="button" onClick={() => setTrail()}>Exploring Chapter {roman(chapterContext.number)} <span>Return to bookmark</span></button>}
+          {exploration && <button className="historical-pill" type="button" onClick={() => setTrail()}>Atlas set to Chapter {roman(exploration.chapter)} <span>Return to bookmark</span></button>}
         </div>
-        <Journal atlas={atlas} destination={destination} href={href} />
+        <Journal atlas={knowledge} destination={destination} href={journalHref} />
       </> :
         <WorldStage desired={desired} atlas={atlas} selected={selected} select={selectPlace}
           inspect={inspect} exhibit={inspectId} doorOpen={doorOpen} focus={focus} panelOpen={scenePanelOpen}
           atlasPose={atlasPose} cancel={cancel}>
           {(shown) => {
-            const place = shown !== 'atlas' ? atlas.landmarks.find(entry => entry.scene?.id === shown) : undefined
+            const place = shown !== 'atlas' ? scenePlace(atlas, shown) : undefined
             const exhibits = place && shown !== 'atlas' ? atlas.exhibits.filter(item => item.location === place.id && scenes[shown].exhibits.includes(item.id)) : []
-            const title = place?.name ?? 'The Wilderland Atlas'
+            const interior = shown === 'bag-end-interior'
+            const canEnter = place?.scene?.rooms.some(room => room.id === 'bag-end-interior')
+            const title = interior ? 'Inside Bag End' : place?.name ?? 'The Wilderland Atlas'
             return <>
               <div className="world-context">
                 {(place || desired !== 'atlas') && <a className="back-to-atlas" href={back}><ArrowLeft size={15} /> Back to the atlas</a>}
+                {(interior || desired === 'bag-end-interior') && <a className="back-to-atlas back-outside" href={href('scene', 'bag-end')}><ArrowLeft size={15} /> Return outside</a>}
                 <h1>{title}</h1>
-                {(!immersive || chapterContext) && <div className="world-subtitle">
-                  {chapterContext ? <>Exploring Chapter {roman(chapterContext.number)} <b>·</b> {chapterContext.title}</>
+                {(!immersive || exploration) && <div className="world-subtitle">
+                  {exploration ? <>Exploring Chapter {roman(exploration.chapter)}{chapterContext && <> <b>·</b> {chapterContext.title}</>}</>
                     : place ? `${place.region} · Chapter ${roman(place.reveal.chapter)}` : `${hobbit.title} · ${enhancedEdition.name}`}
                 </div>}
               </div>
@@ -209,20 +232,30 @@ export default function App() {
                 </button>
               </div>
               {scenePanelOpen ? <div className="field-overlay" id="field-notes">
-                {place ? <ScenePanel exhibits={exhibits} selected={inspectId} inspect={inspect} doorOpen={doorOpen}
+                {place ? <ScenePanel interior={interior} moment={knowledge.exhibits.some(item => item.id === 'thror-map') && shown !== 'atlas' ? {
+                  quiet: comparePosition(atlas.cutoff, at(1, 2)) < 0,
+                  choose(quiet) {
+                    const gathering = progress.chapter === 1 ? progress : at(1, completeEvent)
+                    const target = quiet ? at(1, 1) : gathering
+                    navigateTo(atlasLink('scene', shown, comparePosition(target, progress) < 0 ? target : undefined))
+                  },
+                } : undefined} enter={canEnter ? href('scene', 'bag-end-interior') : undefined} exhibits={exhibits} selected={inspectId} inspect={inspect} doorOpen={doorOpen}
                   toggle={() => setDoorOpen(value => !value)} close={closeNotes} href={href} />
                   : <AtlasPanel atlas={atlas} selected={selected} pick={id => { selectPlace(id); setFocus({ id, time: performance.now() }) }}
                     focus={id => setFocus({ id, time: performance.now() })} href={href} chapter={chapterContext} close={closeNotes} />}
               </div> : !immersive && <button type="button" className="notes-peek" onClick={() => setNotesOpen(true)}
                 aria-label="Open field notes" aria-expanded={false}><NotebookPen size={17} /><span>{place?.name ?? atlas.landmarks.find(entry => entry.id === selected)?.name ?? 'Discovered places'}</span><b>Field notes</b></button>}
               {!immersive && trail}
-              {shown === 'atlas' && atlas.routes.length > 0 && !immersive && <div className="map-legend"><span className="route-sample" /> Company’s route</div>}
+              {shown === 'atlas' && !immersive && <div className="map-legend">
+                {atlas.routes.length > 0 && <><span className="route-sample" /> Company’s route <span className="legend-divider" /></>}
+                <span className="mist-sample" /> Discovery mist
+              </div>}
             </>
           }}
         </WorldStage>}
     </main>
-    {dialog === 'search' && <SearchDialog atlas={atlas} close={() => setDialog(undefined)} navigate={searchNavigate} />}
-    {dialog === 'bookmark' && <BookmarkDialog chapters={supported.chapters} close={() => setDialog(undefined)}
+    {dialog === 'search' && <SearchDialog atlas={knowledge} close={() => setDialog(undefined)} navigate={searchNavigate} />}
+    {dialog === 'bookmark' && <BookmarkDialog chapters={chapters} close={() => setDialog(undefined)}
       saved={() => { navigateTo(atlasLink('atlas')); setFocus(undefined); setDialog(undefined) }} />}
   </div>
 }

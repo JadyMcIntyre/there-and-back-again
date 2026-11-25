@@ -2,11 +2,13 @@ import { BookOpen, MapPin, Package, Search, UserRound, X } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { enhancedEdition } from '../content/hobbit'
 import { useProgress } from '../content/progress'
+import { chapterNumbers, chapterRange, completeEvent, eventsForChapter } from '../content/reading'
 import { at } from '../content/schema'
 import { comparePosition, type Atlas } from '../content/spoilers'
+import { useOfflineStatus } from './offline'
 import { roman } from './Roman'
 
-function Modal({ name, close, children }: { name: string, close: () => void, children: ReactNode }) {
+export function Modal({ name, close, children }: { name: string, close: () => void, children: ReactNode }) {
   const dialog = useRef<HTMLDialogElement>(null)
   useEffect(() => {
     const node = dialog.current
@@ -65,7 +67,7 @@ export function SearchDialog({ atlas, close, navigate }: {
         onChange={event => setQuery(event.target.value)} autoFocus /></label>
       <div className="search-results" id="atlas-search-results">
         {query.trim() && !results.length && <p role="status">No discoveries match your search.</p>}
-        {!query.trim() && <p>Search discoveries visible at your current exploration point.</p>}
+        {!query.trim() && <p>Search discoveries available at your reading bookmark.</p>}
         {results.map((match, index) => {
           const { item } = match
           const isPlace = 'region' in item
@@ -83,42 +85,53 @@ export function SearchDialog({ atlas, close, navigate }: {
 }
 
 export function BookmarkDialog({ chapters, close, saved }: { chapters: Atlas['chapters'], close: () => void, saved: () => void }) {
+  const offline = useOfflineStatus()
   const { bookmark, saveBookmark } = useProgress()
   const [chapterNumber, setChapter] = useState(bookmark.position.chapter)
   const [event, setEvent] = useState(bookmark.position.event)
   const [page, setPage] = useState(bookmark.pdfPage)
-  const chapter = chapters.find(entry => entry.number === chapterNumber)!
-  const start = enhancedEdition.chapterStarts[chapterNumber]
-  const end = (enhancedEdition.chapterStarts[chapterNumber + 1] ?? start + 1) - 1
+  const [confirm, setConfirm] = useState(false)
+  const [error, setError] = useState(false)
+  const { first: start, last: end } = chapterRange(chapterNumber)
+  const milestones = eventsForChapter(chapterNumber)
+  const position = at(chapterNumber, event)
+  const advanced = comparePosition(position, bookmark.position) > 0 || page > bookmark.pdfPage
 
   function save(submit: FormEvent) {
     submit.preventDefault()
-    saveBookmark({ edition: enhancedEdition.id, position: at(chapterNumber, event), pdfPage: page })
-    saved()
+    if (advanced && !confirm) { setConfirm(true); return }
+    if (saveBookmark({ edition: enhancedEdition.id, position, pdfPage: page }, confirm)) saved()
+    else setError(true)
   }
 
   return <Modal name="Your reading bookmark" close={close}>
     <p className="dialog-intro"><BookOpen size={16} /> The Hobbit · {enhancedEdition.name}</p>
-    <form className="bookmark-form" onSubmit={save}>
+    <p className="offline-status" role="status">{offline}</p>
+    <form className="bookmark-form" onSubmit={save} onChange={() => { setConfirm(false); setError(false) }}>
       <div><label htmlFor="bookmark-chapter">Chapter</label><select id="bookmark-chapter" value={chapterNumber} onChange={change => {
         const next = Number(change.target.value)
         setChapter(next)
         setPage(enhancedEdition.chapterStarts[next])
         setEvent(0)
       }}>
-        {chapters.map(entry => <option key={entry.number} value={entry.number}>{entry.number <= bookmark.position.chapter ? `${roman(entry.number)} · ${entry.title}` : `Chapter ${roman(entry.number)}`}</option>)}
+        {chapterNumbers.map(number => {
+          const title = chapters.find(entry => entry.number === number)?.title
+          return <option key={number} value={number}>Chapter {roman(number)}{title ? ` · ${title}` : ''}</option>
+        })}
       </select></div>
       <div><label htmlFor="bookmark-event">Reading position</label><select id="bookmark-event" value={event} onChange={change => setEvent(Number(change.target.value))}>
         <option value={0}>Just started</option>
-        {chapter.milestones.map((milestone, index) => <option key={milestone.id} value={milestone.reveal.event}>
+        {milestones.map((milestone, index) => <option key={milestone.id} value={milestone.reveal.event}>
           {comparePosition(milestone.reveal, bookmark.position) <= 0 ? milestone.label : `Checkpoint ${index + 1}`}
         </option>)}
-        {chapter.completionEvent !== undefined && <option value={chapter.completionEvent}>Chapter complete</option>}
+        <option value={completeEvent}>Chapter complete</option>
       </select></div>
       <div><label htmlFor="bookmark-page">PDF page</label><input id="bookmark-page" type="number" min={start} max={end} required value={Number.isFinite(page) ? page : ''}
         onChange={change => setPage(change.target.valueAsNumber)} /></div>
       <small>Discoveries follow your reading position. The PDF page marks where to resume.</small>
-      <button type="submit" className="primary-button">Save bookmark</button>
+      {error && <p role="alert">Choose a valid page and reading position for this chapter.</p>}
+      {confirm && <p className="chapter-note bookmark-confirm" role="status">Advance to Chapter {roman(chapterNumber)}, PDF page {page}? This can reveal more discoveries.</p>}
+      <button type="submit" className="primary-button">{confirm ? 'Confirm advancement' : 'Save bookmark'}</button>
     </form>
   </Modal>
 }

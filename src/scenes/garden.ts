@@ -15,7 +15,8 @@ export function gardenHeight(x: number, z: number) {
   const hill = 4.9 * Math.exp(-((x / 5.4) ** 2 + ((z + 3.15) / 3.38) ** 2))
   const step = 1 - smooth(-0.68, 1.62, z)
   const bed = 0.12 + (grain(x * 0.6, z * 0.6) - 0.5) * 0.58
-  return bed + hill * step
+  const openPassage = (1 - smooth(.88,1.28,Math.abs(x))) * smooth(-1.9,-1.4,z) * (1 - smooth(.75,1.31,z))
+  return mix(bed + hill * step, .11, openPassage)
 }
 
 export function gardenEdge(angle: number) {
@@ -71,7 +72,7 @@ export function gardenPlants(compact: boolean) {
     const x = (rng() - 0.5) * 21, z = (rng() - 0.5) * 15
     const angle = Math.atan2((z + 0.3) / 7.5, x / 10.4)
     const radius = Math.hypot(x / 10.4, (z + 0.3) / 7.5)
-    if (radius > gardenEdge(angle) - 0.02) continue
+    if (radius > gardenEdge(angle) - 0.02 || Math.abs(x) < 1.3 && z > -2 && z < 1.35) continue
     if (z > 0.52 && Math.abs(x - pathCenter(z)) < pathWidth(z) * (0.84 + rng() * 0.44)) continue
     const patch = grain(x * 0.38, z * 0.52)
     if (rng() > 0.2 + patch * 1.02) continue

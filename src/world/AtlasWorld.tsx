@@ -11,6 +11,7 @@ import { Instances, type Plant } from './Brush'
 import { makeTrees, plantForests } from './landscape'
 import { makeTerrain, makeWater, terrainHeight, withinLand } from './terrain'
 import { mix } from './math'
+import DiscoveryMist from './DiscoveryMist'
 import { Settlements } from './Landmarks'
 
 function Ground({ compact }: { compact: boolean }) {
@@ -152,9 +153,10 @@ function Markers({ places, compact, selected, select, portal }: {
   </Html>
 }
 
-export default function AtlasWorld({ atlas, compact, selected, select, portal }: {
+export default function AtlasWorld({ atlas, compact, selected, select, portal, reduced }: {
   atlas: Atlas
   compact: boolean
+  reduced: boolean
   selected?: string
   select: (id: string) => void
   portal: RefObject<HTMLDivElement | null>
@@ -164,6 +166,7 @@ export default function AtlasWorld({ atlas, compact, selected, select, portal }:
     <Woodlands compact={compact} showFields={atlas.landmarks.some(place => place.id === 'bag-end')} />
     <Settlements landmarks={atlas.landmarks} />
     <Journey routes={atlas.routes} />
+    <DiscoveryMist landmarks={atlas.landmarks} compact={compact} reduced={reduced} />
     <Markers portal={portal} places={atlas.landmarks} compact={compact} selected={selected} select={select} />
   </>
 }

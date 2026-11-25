@@ -9,11 +9,13 @@ export const reference = (target: string, label: string, chapter: number, event:
   ({ id: target, target, label, reveal: at(chapter, event), pages })
 
 type Profile = Pick<Exhibit, 'id' | 'name' | 'subtitle' | 'location'>
+const mentionedCharacters = new Set(['belladonna', 'bungo', 'old-took', 'bullroarer', 'thror', 'thrain', 'thrain-old', 'durin', 'smaug'])
+
 type Portrait = NonNullable<Exhibit['portrait']>['style']
 
 function character(profile: Profile, style: Portrait, facts: Fact[], links: EntryLink[] = []): Exhibit {
   const reveal = facts[0].reveal
-  return { ...profile, reveal, kind: 'character', facts, links, portrait: { id: profile.id, style, reveal } }
+  return { ...profile, reveal, encounter: mentionedCharacters.has(profile.id) ? null : reveal, kind: 'character', facts, links, portrait: { id: profile.id, style, reveal } }
 }
 
 function object(id: string, name: string, subtitle: string, location: string, facts: Fact[], links: EntryLink[] = []): Exhibit {
@@ -188,6 +190,10 @@ export const profiles: Exhibit[] = [
 ]
 
 export const objects = [
+  object('dining-table', 'The Dining Table', 'Household furniture · Bag End', 'bag-end', [
+    background('dining-room', 1, 1, [25, 25], 'Bag End has dining rooms off its main passage, on the same level as the rest of the house.'),
+    development('supper', 1, 2, [30, 32], 'Gandalf takes the head of the table as the company sits down. Bilbo has to make room for far more guests than he expected.'),
+  ], [reference('bag-end', 'Inside', 1, 1), reference('gandalf', 'Sits at the head', 1, 2)]),
   object('green-door', 'The Round Door', 'Entrance · Bag End', 'bag-end', [
     appearance('round-door', 1, 1, [25, 25], 'A round green door with a brass knob at its centre opens into a panelled tunnel with rooms off either side.'),
     development('mark', 1, 2, [27, 35], 'Gandalf cuts a sign on the door that directs the visiting dwarves to the right house.'),
@@ -241,6 +247,7 @@ export const objects = [
   ], [reference('bilbo', 'Carries', 2, 3), reference('underground-lake', 'Used on the way to', 5, 1)]),
   object('plain-ring', 'The Plain Ring', 'Pocket-sized find · Misty Mountains', 'underground-lake', [
     appearance('floor', 5, 1, [70, 71], 'Bilbo feels a small, cold ring on the tunnel floor and puts it into his pocket.'),
+    appearance('gold-band', 5, 2, [77, 77], 'Gollum’s recollection describes his ring as golden.'),
     development('effect', 5, 2, [77, 83], 'He learns it can hide its wearer from sight. He uses it to escape past Gollum and the goblins.'),
     development('secret', 6, 1, [84, 86], 'He leaves the ring out of the story he tells the company.'),
   ], [reference('bilbo', 'Finds', 5, 1), reference('gollum', 'Former keeper', 5, 2)]),

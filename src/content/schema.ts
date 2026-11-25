@@ -16,13 +16,16 @@ const fact = entry.extend({
 })
 const link = entry.extend({ target: z.string(), label: z.string(), pages: pages.optional() })
 const alias = entry.extend({ name: z.string(), pages: pages.optional() })
+const encounter = positionSchema.nullable()
+const scene = entry.extend({ rooms: z.array(entry).optional() })
 const coordinate = z.tuple([z.number(), z.number()])
 const landmark = entry.extend({
   name: z.string(),
   region: z.string(),
   point: coordinate.optional(),
   facts: z.array(fact).min(1),
-  scene: entry.optional(),
+  scene: scene.optional(),
+  encounter: encounter.optional(),
   links: z.array(link).optional(),
   aliases: z.array(alias).optional(),
 })
@@ -31,6 +34,7 @@ const exhibit = entry.extend({
   kind: z.enum(['character', 'object']),
   subtitle: z.string(),
   location: z.string(),
+  encounter: encounter.optional(),
   facts: z.array(fact).min(1),
   links: z.array(link).optional(),
   aliases: z.array(alias).optional(),
@@ -71,5 +75,6 @@ export const editionSchema = z.object({
   id: z.string(),
   bookId: z.string(),
   name: z.string(),
+  storyEndPage: z.number().int().positive(),
   chapterStarts: z.record(z.coerce.number().int().positive(), z.number().int().positive()),
 })

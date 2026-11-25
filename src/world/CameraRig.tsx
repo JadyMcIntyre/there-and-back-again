@@ -2,18 +2,18 @@ import { OrbitControls } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
 import gsap from 'gsap'
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
-import { MOUSE, OrthographicCamera, Vector3, type Vector3Tuple } from 'three'
+import { MOUSE, TOUCH, OrthographicCamera, Vector3, type Vector3Tuple } from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 
 export type CameraPose = { position: Vector3Tuple, target: Vector3Tuple, scale: number }
-type CameraAction = 'home' | 'in' | 'out' | 'rotate' | 'pull-back' | 'settle'
+export type CameraAction = 'north' | 'plan' | 'left' | 'right' | 'up' | 'down' | 'home' | 'in' | 'out' | 'rotate' | 'pull-back' | 'settle'
 export type CameraHandle = {
   capture: () => CameraPose
   move: (action: CameraAction, signal?: AbortSignal) => Promise<void>
   focus: (point: Vector3, approach?: boolean, signal?: AbortSignal) => Promise<void>
   restore: (pose: CameraPose, signal?: AbortSignal) => Promise<void>
 }
-type Composition = { eye: Vector3Tuple, center: number, width: number, height: number }
+type Composition = { eye: Vector3Tuple, center: number, width: number, height: number, orbitLimit?: boolean }
 export const atlasComposition: Composition = { eye: [16, 92, 115], center: 4.1, width: 136, height: 75 }
 export const portraitAtlasComposition: Composition = { eye: [123, 123, 44], center: 4.8, width: 114, height: 97 }
 
@@ -58,6 +58,20 @@ export function CameraRig({ composition, scene, compact, panelOpen, locked, redu
     controls.update()
     invalidate()
   }, [arriving, baseZoom, camera, center, compact, composition, controls, invalidate, panelOpen, reduced, size])
+
+  useLayoutEffect(() => {
+    if (!controls) return
+    const limit = scene ? 12 : 70
+    const bound = () => {
+      const offset = controls.target.clone()
+      controls.target.x = Math.min(limit, Math.max(-limit, controls.target.x))
+      controls.target.z = Math.min(limit * .7, Math.max(-limit * .7, controls.target.z))
+      controls.target.y = Math.min(scene ? 5 : 27, Math.max(-2, controls.target.y))
+      camera.position.add(controls.target).sub(offset)
+    }
+    controls.addEventListener('change', bound)
+    return () => controls.removeEventListener('change', bound)
+  }, [camera, controls, scene])
 
   useLayoutEffect(() => {
     if (!controls || !(camera instanceof OrthographicCamera) || baseZoom <= 0) return
@@ -124,6 +138,18 @@ export function CameraRig({ composition, scene, compact, panelOpen, locked, redu
           target.copy(home)
           position.fromArray(composition.eye)
           zoom = baseZoom
+        } else if (action === 'plan' || action === 'north') {
+          target.copy(home)
+          position.set(0, action === 'plan' ? 145 : 93, action === 'plan' ? 8 : 116)
+          zoom = baseZoom
+        } else if (action === 'left' || action === 'right' || action === 'up' || action === 'down') {
+          const forward = target.clone().sub(position).setY(0).normalize()
+          const right = forward.clone().cross(new Vector3(0, 1, 0))
+          const direction = action === 'left' || action === 'right' ? right : forward
+          const distance = (action === 'left' || action === 'down' ? -1 : 1) * 52 / camera.zoom
+          position.addScaledVector(direction, distance)
+          target.addScaledVector(direction, distance)
+          return apply(target, position, zoom, 0.22, signal)
         } else if (action === 'rotate') {
           position.sub(target).applyAxisAngle(new Vector3(0, 1, 0), Math.PI / 6).add(target)
         } else if (action === 'settle') {
@@ -143,7 +169,9 @@ export function CameraRig({ composition, scene, compact, panelOpen, locked, redu
   }, [baseZoom, camera, center, composition, controls, handle, invalidate, reduced])
 
   return <OrbitControls ref={setControls} makeDefault enabled={!locked} enableDamping={!reduced && !locked} dampingFactor={0.13}
-    minZoom={baseZoom * 0.7} maxZoom={baseZoom * (scene ? 3.5 : 6)} minPolarAngle={0.3} maxPolarAngle={scene ? 1.36 : 1.10}
+    minAzimuthAngle={composition.orbitLimit ? -1.12 : undefined} maxAzimuthAngle={composition.orbitLimit ? 1.20 : undefined}
+    minZoom={baseZoom * 0.7} maxZoom={baseZoom * (scene ? 3.5 : 6)} minPolarAngle={0.055} maxPolarAngle={scene ? 1.36 : 1.10}
     rotateSpeed={0.66} panSpeed={0.89} zoomSpeed={0.68}
-    mouseButtons={{ LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN }} />
+    touches={{ ONE: TOUCH.ROTATE, TWO: TOUCH.DOLLY_PAN }}
+    mouseButtons={{ LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.PAN, RIGHT: MOUSE.PAN }} />
 }

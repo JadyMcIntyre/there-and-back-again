@@ -460,3 +460,75 @@ h1, h2, p { margin: 0; }
   .atlas-app .brand-mark { width: 21px; height: 21px; }
   .atlas-app .nav a { min-width: 25px; }
 }
+
+.world-stage .chapter-strip.full-trail { position: relative; display: flex; overflow-x: auto; scrollbar-color: #a99972 transparent; }
+.full-trail .chapter-stop { flex: 0 0 115px; }
+.full-trail .chapter-stop.locked { flex-basis: 43px; justify-content: center; gap: 2px; color: #756b52; background: #eee5d2; cursor: default; }
+.full-trail .chapter-stop.locked .chapter-numeral { border-color: transparent; }
+.bookmark-form .bookmark-confirm { margin: 0; padding: 9px 11px; color: #4c503b; background: #eee2be; border: 1px solid #d1bf92; border-radius: 5px; font-size: 12px; }
+@media (max-width: 760px) {
+  .full-trail .chapter-stop, .full-trail .chapter-stop.locked { flex-basis: 38px; }
+  .full-trail .chapter-stop.locked { opacity: .8; }
+}
+.controls-help { position:absolute; z-index: 15; bottom: 254px; right: var(--chrome-left); }
+.controls-help summary { list-style:none; width:38px; height:38px; display:grid; place-items:center; cursor:pointer; border-radius:8px; color:#3b4c36; border:1px solid #bcb08e; background:#f6eed9f4; }
+.controls-help summary::-webkit-details-marker { display:none; }
+.controls-help > div { position:absolute; width:225px; bottom:0; right:46px; border:1px solid #bcb08e; border-radius:8px; background:#f7efda; color:#304331; padding:12px; font-size:11px; box-shadow:0 4px 15px #42391830; }
+.controls-help > div p { margin:6px 0; }
+.camera-presets { display:flex; gap:6px; }
+.camera-presets button { padding:4px 6px; border:1px solid #c4b58f; border-radius:5px; background:#e8e5d1; }
+.viewport:focus-visible { outline:2px dashed #a1864b; outline-offset:-4px; }
+@media(max-width:760px) {
+ .controls-help { right:10px; bottom:349px; }
+ .controls-help summary { width:34px; height:34px; }
+ .world-stage:has(.field-overlay) .controls-help { bottom:auto; top:calc(var(--top-gap) + 279px); }
+}
+.object-studio { width:100%; height:min(43vh,345px); background:radial-gradient(ellipse at 48% 29%, #738366, #3a5542 72%, #2d4735); border:1px solid #638064; border-radius:9px; overflow:hidden; }
+.object-loading { display:grid; place-items:center; color:#efe4ca; }
+.object-toolbar { display:flex; flex-wrap:wrap; gap:5px; align-items:center; margin:9px 0; }
+.object-toolbar span { margin-right:auto; font-size:11px; }
+.object-toolbar .icon-button { width:30px; height:28px; }
+.object-fact { font-size:13px; line-height:1.55; }
+.object-note { display:block; color:#665d4d; margin-top:7px; font-size:11px; }
+.object-open { margin-top:9px; }
+.world-layer .interior-viewport { background:radial-gradient(ellipse at 42% 41%, #ead9ad 0%, #cfb284 68%, #a88d67); }
+.back-outside { margin-left:5px; }
+.discovery-ledger { display:flex; flex-wrap:wrap; column-gap:17px; row-gap:7px; align-items:center; padding:9px 12px; border:1px solid #d2c3a6; border-radius:7px; margin-bottom:11px; background:#eee7d5; color:#455742; font-size:11px; }
+.discovery-ledger > span, .new-ledger { display:inline-flex; align-items:center; gap:4px; }
+.discovery-ledger .ledger-heading { gap:7px; border-right:1px solid #cbbca0; padding-right:13px; }
+.ledger-heading strong { color:#3a5039; font:400 17px var(--serif); }
+.new-ledger { margin-left:auto; border:0; background:#e7d7a9; color:#665128; border-radius:15px; padding:3px 8px; font:inherit; cursor:pointer; }
+.mystery-folio { position:relative; display:flex; align-items:center; gap:9px; margin:7px 3px 6px 0; padding:7px; border:1px dashed #beaf8e; border-radius:5px; color:#65573b; background:linear-gradient(120deg,#efe4ca,#e8dcc0); }
+.mystery-folio strong { display:block; font:400 16px var(--serif); }
+.mystery-folio small { display:block; font-size:10px; }
+.mystery-art { position:relative; flex:0 0 33px; height:34px; display:grid; place-items:center; border-radius:5px; border:1px solid #cbbb99; isolation:isolate; }
+.mystery-art i { position:absolute; z-index:-1; inset:5px; border-radius:50%; filter:blur(4px); background:#a2936c; }
+.discovery-state { display:inline-flex; margin:0 5px 8px 0; padding:2px 6px; border:1px solid #cabea1; border-radius:12px; background:#eee7d2; color:#5a593f; font-size:10px; font-weight:600; }
+.new-entry { color:#6d512b; background:#f0dfad; }
+.discovery-star { color:#986f32; }
+.locked-recap { filter:saturate(.64); opacity:.74; }
+.locked-recap:hover { background:transparent; }
+.journal-location-actions { display:flex; gap:16px; }
+.offline-status { color:#52604b; font-size:11px; margin:-4px 0 10px; }
+@media (prefers-reduced-motion: no-preference) {
+  .unlocked-folio .journal-illustration { animation:discovered 1.1s ease-out both; }
+  @keyframes discovered { from { filter:brightness(.89) saturate(.6); box-shadow:0 0 0 0 #c2a36b40; } 35% { box-shadow:0 0 0 7px #c2a36b45; } to { filter:none; box-shadow:0 0 0 0 #c2a36b00; } }
+}
+@media (max-width:760px) {
+  .discovery-ledger { gap:6px 11px; padding:6px 8px; font-size:10px; }
+  .discovery-ledger .ledger-heading { border:0; flex-basis:100%; }
+  .ledger-review { display:none; }
+  .folio .journal-sidebar:has(> .journal-link) { max-height:155px; }
+}
+.legend-divider { height:12px; width:1px; background:#b9ad8e; }
+.mist-sample { width:13px; height:8px; border-radius:7px; background:#eae6d7; box-shadow:inset 0 0 2px #879083; }
+
+.trail-tools { display:flex; align-items:center; gap:12px; }
+.trail-scroll { display:flex; gap:3px; }
+.trail-scroll button { width:22px; height:20px; display:grid; place-items:center; border:1px solid #cbbd9a; border-radius:4px; background:#efe6d1; color:#4b5a42; cursor:pointer; }
+.field-overlay:has(.chapter-note) .location-art { flex-basis:clamp(74px,12vh,112px); }
+@media (max-width:760px) { .trail-scroll { display:none; } }
+.journal-sections { position:sticky; top:56px; z-index:8; background:#f1eadb; padding-block:5px; }
+@media (max-width:760px) { .journal-sections { top:49px; } }
+.scene-moment { display:flex; flex-wrap:wrap; gap:4px 7px; align-items:center; justify-content:space-between; color:#ead9b6; margin:3px 14px 5px; font-size:11px; }
+.scene-moment select { border:1px solid #a49064; border-radius:4px; color:#f0e4c8; background:#364d36; font:inherit; padding:4px; max-width:100%; }
