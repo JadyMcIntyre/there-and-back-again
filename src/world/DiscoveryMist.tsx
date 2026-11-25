@@ -32,6 +32,7 @@ function createLayer(frontier: number, upper: boolean) {
   return new ShaderMaterial({
     uniforms: {
       frontier: { value: frontier },
+      drift: { value: 0 },
       height: { value: upper ? 5.6 : 2.5 },
       opacity: { value: upper ? 0.45 : 0.93 },
       ivory: { value: new Color(upper ? '#f8f3df' : '#e4ddc8') },
@@ -49,7 +50,7 @@ function createLayer(frontier: number, upper: boolean) {
       }`,
     fragmentShader: `
       varying vec2 ground;
-      uniform float frontier, height, opacity;
+      uniform float frontier, height, opacity, drift;
       uniform vec3 ivory, shade;
       float hash(vec2 p) {
         return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -61,13 +62,13 @@ function createLayer(frontier: number, upper: boolean) {
           mix(hash(i + vec2(0,1)), hash(i + vec2(1,1)), f.x), f.y);
       }
       void main() {
-        vec2 cloud = ground * vec2(.119,.15) + height * vec2(.12, .17);
+        vec2 cloud = ground * vec2(.105,.14) + height * vec2(.12, .17) + vec2(drift, drift * .25);
         float soft = cloudNoise(cloud) * .69 + cloudNoise(cloud * 2.08 + 9.7) * .25 + cloudNoise(cloud * 3.82) * .06;
         float border = frontier + sin(ground.y * .139) * 4. + (soft - .5) * 9.;
         float discovery = smoothstep(-6., 13., ground.x - border);
         float rim = 1. - smoothstep(.79, 1., length((ground + vec2(-1.,0.)) / vec2(70.,47.)));
         float billows = smoothstep(.17, .78, soft);
-        float alpha = discovery * rim * opacity * (.32 + billows * .68);
+        float alpha = discovery * rim * opacity * (.17 + billows * .83);
         if (alpha < .005) discard;
         gl_FragColor = vec4(mix(shade, ivory, billows), alpha);
         #include <colorspace_fragment>
@@ -91,9 +92,9 @@ export default function DiscoveryMist({ landmarks, compact, reduced }: {
       invalidate()
       return
     }
-    const tween = gsap.to(layers.map(layer => layer.uniforms.frontier), {
-      value: frontier, duration: 0.82, ease: 'power2.out', onUpdate: () => invalidate(),
-    })
+    const tween = gsap.timeline({ onUpdate: () => invalidate() })
+      .to(layers.map(layer => layer.uniforms.frontier), { value: frontier, duration: .82, ease: 'power2.out' }, 0)
+      .to(layers.map(layer => layer.uniforms.drift), { value: '+=0.14', duration: 1.05, ease: 'sine.out' }, 0)
     return () => { tween.kill() }
   }, [frontier, invalidate, layers, reduced])
 

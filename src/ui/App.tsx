@@ -9,12 +9,13 @@ import { at, type Position } from '../content/schema'
 import { chapterPlace, comparePosition, historicalPosition, resolveDestination, scenePlace, visibleAtlas, type Atlas, type Destination } from '../content/spoilers'
 import { sceneId, scenes } from '../scenes/registry'
 import type { CameraPose } from '../world/CameraRig'
-import WorldStage, { type World } from '../world/WorldStage'
-import { BookmarkDialog, SearchDialog } from './Dialogs'
+import WorldStage, { type World, type WorldShortcuts } from '../world/WorldStage'
+import { BookmarkDialog, CommandPalette, ShortcutDialog } from './Dialogs'
 import { AtlasPanel, ScenePanel } from './FieldNotes'
 import Journal from './Journal'
 import { atlasLink, navigateTo, type LinkTo } from './navigation'
 import { roman } from './Roman'
+import { shortcuts, useShortcuts, type ShortcutActions } from './shortcuts'
 
 function useHash() {
   const [hash, setHash] = useState(window.location.hash)
@@ -39,7 +40,7 @@ function Header({ view, position, pdfPage, openBookmark, href, search }: {
         <a href={href('atlas')} aria-label="Atlas" title="Atlas" aria-current={view !== 'journal' ? 'page' : undefined}><Map size={16} /><span>Atlas</span></a>
         <a href={href('journal')} aria-label="Journal" title="Journal" aria-current={view === 'journal' ? 'page' : undefined}><BookOpen size={16} /><span>Journal</span></a>
       </nav>
-      <div className="topbar-actions"><button className="search-button" type="button" aria-label="Search atlas" onClick={search}><Search size={17} /><span>Search</span></button>
+      <div className="topbar-actions"><button className="search-button" type="button" aria-label="Search atlas" title={shortcuts.palette.hint} aria-keyshortcuts="Control+K Meta+K" onClick={search}><Search size={17} /><span>Search</span></button>
       <button type="button" className="bookmark" onClick={openBookmark} aria-label="Edit reading bookmark">
         <Bookmark size={17} /><span><strong>Chapter {roman(position.chapter)}</strong><small>PDF page {pdfPage}</small></span><ChevronRight size={15} className="bookmark-chevron" />
       </button></div>
@@ -72,7 +73,16 @@ function Timeline({ progress, exploration, chapters, select, reset }: {
         </div>
       </div>
     </div>
-    <div className="chapter-strip full-trail" ref={strip} aria-label="Explore chapters">
+    <div className="chapter-strip full-trail" ref={strip} aria-label="Explore chapters" onKeyDown={event => {
+      if ((event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') || event.altKey || event.ctrlKey || event.metaKey) return
+      const available = Array.from(event.currentTarget.querySelectorAll('button:not(:disabled)'))
+      const index = available.indexOf(event.target as HTMLButtonElement)
+      const next = available[index + (event.key === 'ArrowRight' ? 1 : -1)] as HTMLButtonElement | undefined
+      if (index < 0 || !next) return
+      event.preventDefault()
+      next.focus()
+      next.click()
+    }}>
       {slots.map(chapter => {
         const isActive = chapter.number === active.chapter
         const label = chapter.title ? `${roman(chapter.number)} ${chapter.title}`
@@ -93,7 +103,9 @@ function Timeline({ progress, exploration, chapters, select, reset }: {
 export default function App() {
   const { bookmark } = useProgress()
   const hash = useHash()
-  const [dialog, setDialog] = useState<'search' | 'bookmark'>()
+  const [dialog, setDialog] = useState<'search' | 'bookmark' | 'help'>()
+  const returnFocus = useRef<HTMLElement | null>(null)
+  const worldShortcuts = useRef<WorldShortcuts | null>(null)
   const [inspectId, setInspectId] = useState<string>()
   const [doorOpen, setDoorOpen] = useState(false)
   const [focus, setFocus] = useState<{ id: string, time: number }>()
@@ -189,6 +201,45 @@ export default function App() {
     navigateTo(journalHref(view, id))
   }
 
+  function openDialog(view: 'search' | 'help') {
+    if (!dialog) returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setDialog(view)
+  }
+
+  function closePalette() {
+    setDialog(undefined)
+    requestAnimationFrame(() => {
+      const previous = returnFocus.current
+      if (previous?.isConnected) previous.focus({ preventScroll: true })
+      else document.getElementById('main-content')?.focus({ preventScroll: true })
+    })
+  }
+
+  function activatePlace(id: string) {
+    const place = atlas.landmarks.find(item => item.id === id)
+    if (!place || desired !== 'atlas') return
+    if (place.scene) navigateTo(href('scene', place.scene.id))
+    else setFocus({ id, time: performance.now() })
+  }
+
+  function openExhibit(id: string) {
+    const place = scenePlace(atlas, desired)
+    if (desired !== 'atlas' && atlas.exhibits.some(item => item.id === id && item.location === place?.id)
+      && scenes[desired].exhibits.includes(id)) navigateTo(href('journal', id))
+  }
+
+  const actions: ShortcutActions = {
+    palette: () => openDialog('search'),
+    focus: () => worldShortcuts.current?.focus(),
+    reset: () => worldShortcuts.current?.reset(),
+    immersive: () => setImmersive(value => !value),
+    atlas: () => navigateTo(href('atlas')),
+    journal: () => navigateTo(href('journal')),
+    bookmark: () => setTrail(),
+    help: () => openDialog('help'),
+  }
+  useShortcuts(actions, !!dialog, worldShortcuts)
+
   const trail = <Timeline progress={progress} exploration={exploration} chapters={chapters} select={setTrail} reset={() => setTrail()} />
 
   return <div className={`atlas-app ${inJournal ? 'journal-view' : 'world-view'} ${immersive ? 'is-immersive' : ''}`}>
@@ -197,7 +248,7 @@ export default function App() {
       document.getElementById('main-content')?.focus()
     }}>Skip to the atlas</a>
     <Header view={destination.view} position={progress} pdfPage={bookmark.pdfPage} openBookmark={() => setDialog('bookmark')}
-      href={href} search={() => setDialog('search')} />
+      href={href} search={actions.palette} />
     <main id="main-content" tabIndex={-1} className={inJournal ? 'page journal-page' : 'world-page'}>
       {inJournal ? <>
         <div className="journal-masthead"><div className="eyebrow">{hobbit.title} · {enhancedEdition.name}</div>
@@ -206,8 +257,8 @@ export default function App() {
         </div>
         <Journal atlas={knowledge} destination={destination} href={journalHref} />
       </> :
-        <WorldStage desired={desired} atlas={atlas} selected={selected} select={selectPlace}
-          inspect={inspect} exhibit={inspectId} doorOpen={doorOpen} focus={focus} panelOpen={scenePanelOpen}
+        <WorldStage desired={desired} atlas={atlas} selected={selected} select={selectPlace} activate={activatePlace} openExhibit={openExhibit} shortcuts={worldShortcuts}
+          inspect={inspect} exhibit={inspectId} doorOpen={doorOpen} focus={focus} panelOpen={scenePanelOpen} immersive={immersive}
           atlasPose={atlasPose} cancel={cancel}>
           {(shown) => {
             const place = shown !== 'atlas' ? scenePlace(atlas, shown) : undefined
@@ -219,15 +270,15 @@ export default function App() {
               <div className="world-context">
                 {(place || desired !== 'atlas') && <a className="back-to-atlas" href={back}><ArrowLeft size={15} /> Back to the atlas</a>}
                 {(interior || desired === 'bag-end-interior') && <a className="back-to-atlas back-outside" href={href('scene', 'bag-end')}><ArrowLeft size={15} /> Return outside</a>}
-                <h1>{title}</h1>
+                <div className="world-heading"><h1>{title}</h1>
                 {(!immersive || exploration) && <div className="world-subtitle">
                   {exploration ? <>Exploring Chapter {roman(exploration.chapter)}{chapterContext && <> <b>·</b> {chapterContext.title}</>}</>
                     : place ? `${place.region} · Chapter ${roman(place.reveal.chapter)}` : `${hobbit.title} · ${enhancedEdition.name}`}
-                </div>}
+                </div>}</div>
               </div>
               <div className="world-tools">
                 <button type="button" className="world-tool" aria-label={immersive ? 'Exit immersive mode' : 'Enter immersive mode'}
-                  title={immersive ? 'Exit immersive mode' : 'Enter immersive mode'} aria-pressed={immersive} onClick={() => setImmersive(value => !value)}>
+                  title={`${immersive ? 'Exit' : 'Enter'} immersive mode (I)`} aria-pressed={immersive} onClick={() => setImmersive(value => !value)}>
                   {immersive ? <Minimize size={19} /> : <Maximize size={19} />}
                 </button>
               </div>
@@ -254,7 +305,9 @@ export default function App() {
           }}
         </WorldStage>}
     </main>
-    {dialog === 'search' && <SearchDialog atlas={knowledge} close={() => setDialog(undefined)} navigate={searchNavigate} />}
+    {dialog === 'search' && <CommandPalette atlas={knowledge} world={atlas} close={closePalette} navigate={searchNavigate}
+      visit={id => navigateTo(href('scene', id))} actions={actions} canControl={!!worldShortcuts.current} />}
+    {dialog === 'help' && <ShortcutDialog close={closePalette} />}
     {dialog === 'bookmark' && <BookmarkDialog chapters={chapters} close={() => setDialog(undefined)}
       saved={() => { navigateTo(atlasLink('atlas')); setFocus(undefined); setDialog(undefined) }} />}
   </div>

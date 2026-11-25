@@ -1,9 +1,11 @@
-import { useMemo } from 'react'
-import { CatmullRomCurve3, Vector2, Vector3, type Vector3Tuple } from 'three'
+import { useEffect, useMemo } from 'react'
+import { CatmullRomCurve3, LatheGeometry, SphereGeometry, Vector2, Vector3, type Vector3Tuple } from 'three'
+
+const clayShape = new SphereGeometry(1, 20, 13)
 
 function Clay({ color, position, scale, tilt = 0 }: { color: string, position: Vector3Tuple, scale: Vector3Tuple, tilt?: number }) {
   return <mesh position={position} scale={scale} rotation-z={tilt} castShadow>
-    <sphereGeometry args={[1, 20, 13]} /><meshStandardMaterial color={color} roughness={0.89} />
+    <primitive attach="geometry" object={clayShape} /><meshStandardMaterial color={color} roughness={0.89} />
   </mesh>
 }
 
@@ -14,19 +16,17 @@ function Fold({ points, radius, color }: { points: Vector3Tuple[], radius: numbe
 
 function Face({ tone, brow, eye, smiling = false }: { tone: string, brow: string, eye: string, smiling?: boolean }) {
   return <group>
-    <Clay color={tone} position={[0, 0, 0]} scale={[.239,.252,.207]} />
-    <Clay color={tone} position={[0,-.112,.073]} scale={[.184,.143,.131]} />
-    <Clay color="#c59372" position={[0,-.01,.216]} scale={[.052,.049,.062]} />
-    {[-1,1].map(side => <group key={side}>
-      <Clay color={tone} position={[side*.224,-.014,-.012]} scale={[.06,.088,.064]} tilt={side*-.20} />
-      <Clay color="#b68366" position={[side*.249,-.013,.04]} scale={[.022,.045,.015]} />
-      <Clay color={tone} position={[side*.128,-.056,.149]} scale={[.086,.073,.064]} />
-      <Clay color="#e9cfac" position={[side*.085,.042,.189]} scale={[.048,.025,.020]} tilt={side*.08} />
-      <Clay color={eye} position={[side*.083,.042,.207]} scale={[.022,.021,.009]} />
-      <Clay color="#fbebca" position={[side*.080,.05,.214]} scale={[.007,.007,.003]} />
-      <Clay color={brow} position={[side*.084,.087,.187]} scale={[.057,.019,.028]} tilt={side*(smiling ? .12 : -.22)} />
+    <Clay color={tone} position={[0, -.018, .015]} scale={[.237, .259, .208]} />
+    <Clay color={tone} position={[0, -.043, .21]} scale={[.049, .047, .058]} />
+    {[-1, 1].map(side => <group key={side}>
+      <Clay color={tone} position={[side*.22, -.023, -.004]} scale={[.051, .075, .056]} tilt={side*-.19} />
+      <Clay color="#b8876d" position={[side*.248, -.020, .036]} scale={[.016, .037, .012]} />
+      <Clay color={eye} position={[side*.086, .023, .203]} scale={[.023, .017, .009]} tilt={side*-.10} />
+      <Fold points={[[side*.045,.072,.217],[side*.079,.081,.213],[side*.121,.073,.191]]}
+        color={brow} radius={smiling ? .009 : .011} />
     </group>)}
-    {smiling && <Fold points={[[-.068,-.104,.188],[-.007,-.124,.203],[.062,-.106,.19]]} color="#925e4c" radius={.008} />}
+    {smiling && <Fold points={[[-.052,-.110,.198],[.004,-.122,.210],[.055,-.102,.201]]}
+      color="#805443" radius={.006} />}
   </group>
 }
 
@@ -56,11 +56,11 @@ export function Bilbo() {
     <group position={[0,1.405,.018]} rotation={[.018,-.076,-.055]}>
       <Face tone="#d3a482" brow="#694833" eye="#423b29" smiling />
       <Clay color="#68452e" position={[0,.113,-.05]} scale={[.257,.194,.223]} />
-      {Array.from({ length: 31 }, (_, i) => {
-        const theta = i * 2.4, ring = i < 18 ? .198 : .105
+      {Array.from({ length: 27 }, (_, i) => {
+        const theta = i * 2.4, ring = i < 17 ? .197 : .108
         return <Clay key={i} color={['#704d32','#805537','#926447','#63442d'][i%4]}
-          position={[Math.cos(theta)*ring,.166+(i<18 ? Math.sin(theta)*.018 : .093),Math.sin(theta)*ring*.91-.026]}
-          scale={[.061+(i%3)*.006,.066,.075]} tilt={theta} />
+          position={[Math.cos(theta)*ring,.166+(i<17 ? Math.sin(theta)*.018 : .093),Math.sin(theta)*ring*.91-.026]}
+          scale={[.064+(i%3)*.006,.059,.076]} tilt={theta} />
       })}
     </group>
   </group>
@@ -77,27 +77,28 @@ function Beard({ light, dark, length = .67 }: { light: string, dark: string, len
     {[-3,-2,-1,0,1,2,3].map(i => <Fold key={i}
       points={[[i*.044,-.035,.072],[i*.043+.014,-.15,.121],[i*.025-.024,-length*.70+Math.abs(i)*.032,.106],[i*.01+.028,-length+Math.abs(i)*.073,.021]]}
       radius={.025+(i%2===0?.004:0)} color={i%3===0 ? dark : light} />)}
-    {[-1,1].map(side => <Clay key={side} color={light} position={[side*.064,.032,.097]} scale={[.088,.028,.043]} tilt={side*-.23} />)}
+    {[-1,1].map(side => <Clay key={side} color={light} position={[side*.058,.012,.079]} scale={[.080,.024,.035]} tilt={side*-.23} />)}
   </group>
 }
 
 function WizardHat() {
   const crown = useMemo(() => {
-    const profiles = [[.30,0,0],[.25,.15,.046],[.18,.36,.091],[.105,.54,.17],[.041,.67,.23],[.007,.73,.22]]
-    const result = profiles.map(([r,y,x]) => ({ y, x, r }))
-    return result
+    const profile = [[.311,0],[.267,.13],[.198,.30],[.132,.46],[.076,.59],[.024,.70],[.002,.735]]
+    const geometry = new LatheGeometry(profile.map(([r,y]) => new Vector2(r,y)), 32)
+    const vertices = geometry.attributes.position
+    for (let index = 0; index < vertices.count; index++) {
+      const height = vertices.getY(index)
+      vertices.setX(index, vertices.getX(index) + .28 * (height / .735) ** 1.65)
+    }
+    geometry.computeVertexNormals()
+    return geometry
   }, [])
-  return <group position={[-.008,1.92,-.037]} rotation-z={.075}>
-    <mesh castShadow rotation-z={.025}><cylinderGeometry args={[.455,.477,.065,40]} /><meshStandardMaterial color="#506a7d" roughness={.87} /></mesh>
-    {crown.slice(1).map((upper, i) => {
-      const lower = crown[i]
-      return <mesh key={i} position={[(upper.x+lower.x)/2,(upper.y+lower.y)/2,0]} rotation-z={-Math.atan2(upper.x-lower.x,upper.y-lower.y)} castShadow>
-        <cylinderGeometry args={[upper.r, lower.r, Math.hypot(upper.x-lower.x,upper.y-lower.y)+.027,28]} />
-        <meshStandardMaterial color={i%2 ? '#5c778a' : '#4f6b82'} roughness={.89} />
-      </mesh>
-    })}
-    <mesh position-y={.072} castShadow><cylinderGeometry args={[.270,.30,.092,36]} /><meshStandardMaterial color="#46545c" /></mesh>
-    <Clay color="#a48f63" position={[.082,.073,.289]} scale={[.04,.035,.017]} />
+  useEffect(() => () => crown.dispose(), [crown])
+  return <group position={[-.008,1.862,-.028]} rotation-z={.075}>
+    <Clay color="#526b7e" position={[0,-.012,0]} scale={[.474,.047,.445]} tilt={.024} />
+    <mesh geometry={crown} castShadow><meshStandardMaterial color="#526e84" roughness={.89} /></mesh>
+    <mesh position-y={.057} castShadow><cylinderGeometry args={[.284,.313,.085,32]} /><meshStandardMaterial color="#46545c" /></mesh>
+    <Clay color="#a48f63" position={[.082,.062,.291]} scale={[.04,.029,.015]} />
   </group>
 }
 

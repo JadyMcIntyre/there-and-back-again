@@ -2,7 +2,9 @@ import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group, MeshStandardMaterial, PointLight, Vector3Tuple } from 'three'
 import { random } from '../../world/math'
-import { ScenePin } from '../ScenePin'
+import { Hotspots } from '../../world/Hotspots'
+import { interiorAnchors } from '../anchors'
+import { hotspotClick } from '../../world/hotspotEvents'
 import type { SceneProps } from '../sceneProps'
 import { useAmbientFrames } from '../ambient'
 import { Thorin } from '../Figures'
@@ -53,10 +55,10 @@ function Chair({ x, z, turn = 0, cushioned = false }: { x: number, z: number, tu
   </group>
 }
 
-function Dining({ gathering, inspect }: { gathering: boolean, inspect?: () => void }) {
+function Dining({ gathering, inspect, activate }: { gathering: boolean, inspect: () => void, activate: () => void }) {
   const dishes = gathering ? 7 : 2
   return <group position={[-4.85, .09, .25]}>
-    <group onClick={inspect ? event => { event.stopPropagation(); inspect() } : undefined}>
+    <group onClick={event => hotspotClick(event, inspect)} onDoubleClick={event => hotspotClick(event, activate)}>
       <mesh position-y={1.17} scale={[1.86,.12,.93]} castShadow receiveShadow><cylinderGeometry args={[1,1,.9,40]} /><meshStandardMaterial color="#a87649" roughness={.81} /></mesh>
       <Timber at={[0,1.04,0]} size={[2.56,.21,.54]} color={walnut} />
       {[-1,1].map(side => <group key={side}>
@@ -162,21 +164,14 @@ function HouseShell() {
   </>
 }
 
-const display = {
-  'dining-table': [-4.85, 1.65, .29],
-  'thror-map': [-1.59, 1.65, 2.14],
-  'thror-key': [-0.57, 1.39, 2.82],
-  'instruments': [6.87, .95, -1.18],
-  'thorin': [4.5, 1.94, -.84],
-  'bilbos-pipe': [6.39,1.07,1.76],
-} satisfies Record<string, Vector3Tuple>
 
-export default function BagEndInterior({ exhibits, select, selected, portal, active, reduced, compact }: SceneProps) {
+export default function BagEndInterior({ exhibits, select, activate, selected, portal, active, reduced, compact }: SceneProps) {
+  const entries = exhibits.map(item => ({ ...item, position: interiorAnchors[item.id as keyof typeof interiorAnchors] }))
   const gathering = exhibits.some(item => item.id === 'thror-map')
   return <>
     <Floor />
     <HouseShell />
-    <Dining gathering={gathering} inspect={() => select('dining-table')} />
+    <Dining gathering={gathering} inspect={() => select('dining-table')} activate={() => activate('dining-table')} />
     <Shelves x={-7.35} z={-4.60} />
     <Shelves x={7.04} z={-4.34} />
     <group position={[-1.94,0,-4.54]}>
@@ -202,17 +197,19 @@ export default function BagEndInterior({ exhibits, select, selected, portal, act
     <pointLight position={[-5.5,3.36,-3.3]} intensity={22} color="#ffc681" distance={10} />
     <pointLight position={[.25,3.06,.34]} intensity={12} color="#ffc483" distance={9} />
     {exhibits.map(item => {
-      const pos = display[item.id as keyof typeof display]
+      const pos = interiorAnchors[item.id as keyof typeof interiorAnchors]
       if (!pos) return null
       return <group key={item.id}>
         {item.id === 'thorin' && <group position={[pos[0],.09,pos[2]]} rotation-y={-.29}
-          onClick={event => { event.stopPropagation(); select(item.id) }}><Thorin /></group>}
+          onClick={event => hotspotClick(event, () => select(item.id))}
+          onDoubleClick={event => hotspotClick(event, () => activate(item.id))}><Thorin /></group>}
         {item.id !== 'dining-table' && item.id !== 'thorin' && <group position={[pos[0],pos[1]-.37,pos[2]]} scale={item.id === 'instruments' ? .66 : .36}
-          onClick={event => { event.stopPropagation(); select(item.id) }}>
+          onClick={event => hotspotClick(event, () => select(item.id))}
+          onDoubleClick={event => hotspotClick(event, () => activate(item.id))}>
           <Collectible id={item.id} tabletop />
         </group>}
-        <ScenePin portal={portal} position={pos} item={item} active={item.id===selected} select={() => select(item.id)} />
       </group>
     })}
+    <Hotspots portal={portal} entries={entries} selected={selected} select={select} activate={activate} />
   </>
 }

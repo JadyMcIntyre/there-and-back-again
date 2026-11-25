@@ -1,13 +1,10 @@
-import { Html } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
 import gsap from 'gsap'
-import { DoorOpen, UserRound } from 'lucide-react'
-import { useEffect, useMemo, useRef, type RefObject } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import {
   BufferAttribute, BufferGeometry, CatmullRomCurve3, Color, DoubleSide, DodecahedronGeometry,
   ExtrudeGeometry, Path, Shape, Vector3, type Group, type Vector3Tuple,
 } from 'three'
-import type { Exhibit } from '../content/schema'
 import { Instances, type Plant } from '../world/Brush'
 import { grain, random } from '../world/math'
 import { Model } from '../world/Models'
@@ -17,10 +14,11 @@ import type { SceneProps } from './sceneProps'
 import { BagEndThreshold } from './interiors/BagEndThreshold'
 import { gardenHeight, gardenPlants, grassGeometry, makeGarden, pathCenter } from './garden'
 
-const facadeZ = 0.84
+import { Hotspots } from '../world/Hotspots'
+import { hotspotClick } from '../world/hotspotEvents'
+import { doorCenter, exteriorAnchors, exteriorPlacements, facadeZ, gardenPosition } from './anchors'
 const archTop = (x: number) => 1.15 + 2.74 * Math.max(0, 1 - (x / 5.35) ** 2) ** 0.71
 const stoneShades = ['#a69679', '#b3a082', '#847b69', '#988870', '#a9987f', '#c0ae91']
-const doorCenter: Vector3Tuple = [0, 1.42, facadeZ + 0.22]
 
 function Garden({ compact }: { compact: boolean }) {
   const terrain = useMemo(makeGarden, [])
@@ -54,10 +52,6 @@ function RoughSteps() {
   const geometry = useMemo(() => new DodecahedronGeometry(1, 0), [])
   useEffect(() => () => geometry.dispose(), [geometry])
   return <Instances geometry={geometry} plants={stones}><meshStandardMaterial roughness={0.99} flatShading /></Instances>
-}
-
-function gardenPosition(x: number, z: number): Vector3Tuple {
-  return [x, gardenHeight(x, z), z]
 }
 
 function GardenDetails() {
@@ -212,7 +206,7 @@ function Window({ x }: { x: number }) {
 }
 
 const doorColors = ['#536e41','#5c7749','#61794c','#4b6841','#617a4c','#5a7544','#4c6b42']
-function RoundDoor({ open, reduced, select }: { open: boolean, reduced: boolean, select?: () => void }) {
+function RoundDoor({ open, reduced, select, activate }: { open: boolean, reduced: boolean, select?: () => void, activate?: () => void }) {
   const planks = useMemo(() => {
     const radius = 1.17, count = 13
     return Array.from({ length: count }, (_, index) => {
@@ -251,7 +245,8 @@ function RoundDoor({ open, reduced, select }: { open: boolean, reduced: boolean,
     <StoneRing radius={1.24} width={0.265} position={[0,0,-0.10]} blocks={22} />
     <BagEndThreshold />
     <group ref={pivot} position={[-1.11, 0, 0.051]}>
-      <group position-x={1.11} onClick={select ? event => { event.stopPropagation(); select() } : undefined}>
+      <group position-x={1.11} onClick={select ? event => hotspotClick(event, select) : undefined}
+        onDoubleClick={activate ? event => hotspotClick(event, activate) : undefined}>
         {planks.map((geometry, i) => <mesh key={i} geometry={geometry} castShadow receiveShadow>
           <meshStandardMaterial color={doorColors[i % doorColors.length]} roughness={0.86} />
         </mesh>)}
@@ -275,7 +270,7 @@ function Chimney() {
   </group>
 }
 
-function House({ open, reduced, select }: { open: boolean, reduced: boolean, select?: () => void }) {
+function House({ open, reduced, select, activate }: { open: boolean, reduced: boolean, select?: () => void, activate?: () => void }) {
   const wall = useMemo(makeWall, [])
   const roof = useMemo(makeSodRoof, [])
   const grass = useMemo(grassGeometry, [])
@@ -298,35 +293,13 @@ function House({ open, reduced, select }: { open: boolean, reduced: boolean, sel
     </mesh>)}
     <Window x={-3.05} />
     <Window x={3.05} />
-    <RoundDoor open={open} reduced={reduced} select={select} />
+    <RoundDoor open={open} reduced={reduced} select={select} activate={activate} />
     <Chimney />
   </>
 }
 
-const placements = {
-  bilbo: { base: gardenPosition(-2.46, 2.42), turn: 0.17, label: 2.26 },
-  gandalf: { base: gardenPosition(2.98, 2.85), turn: -0.15, label: 3.04 },
-  'green-door': { base: doorCenter, turn: 0, label: 1.56 },
-}
-function SceneExhibit({ item, active, select, portal }: { item: Exhibit, active: boolean, select: () => void, portal: RefObject<HTMLDivElement | null> }) {
-  const placement = placements[item.id as keyof typeof placements]
-  if (!placement) return null
-  const { base, turn, label } = placement
-  const Icon = item.kind === 'object' ? DoorOpen : UserRound
-  return <group position={base} rotation-y={turn}>
-    {item.kind === 'character' && <group onClick={event => { event.stopPropagation(); select() }}>
-      {item.id === 'bilbo' ? <Bilbo /> : <Gandalf />}
-    </group>}
-    <Html portal={portal as RefObject<HTMLElement>} center position={[0, label, 0]} zIndexRange={active ? [24, 20] : [16, 4]} className="marker-anchor">
-      <button type="button" className={`map-pin named scene-pin ${active ? 'active' : ''}`}
-        aria-label={`Inspect ${item.name}`} aria-pressed={active} onClick={select}>
-        <span><Icon size={12} aria-hidden /></span><strong>{item.name}</strong>
-      </button>
-    </Html>
-  </group>
-}
-
-export default function BagEnd({ compact, exhibits, selected, select, doorOpen, reduced, portal, active }: SceneProps) {
+export default function BagEnd({ compact, exhibits, selected, select, activate, doorOpen, reduced, portal, active }: SceneProps) {
+  const entries = exhibits.map(item => ({ ...item, position: exteriorAnchors[item.id] }))
   const canInspectDoor = exhibits.some(item => item.id === 'green-door')
   return <>
     <Garden compact={compact} />
@@ -335,8 +308,17 @@ export default function BagEnd({ compact, exhibits, selected, select, doorOpen, 
     <OrchardTree position={gardenPosition(6.65, -2.28)} scale={0.97} />
     <OrchardTree position={gardenPosition(7.08, 2.43)} scale={0.68} autumn />
     <ChimneySmoke animate={active && !reduced && !compact} />
-    <House open={doorOpen && canInspectDoor} reduced={reduced} select={canInspectDoor ? () => select('green-door') : undefined} />
+    <House open={doorOpen && canInspectDoor} reduced={reduced} select={canInspectDoor ? () => select('green-door') : undefined} activate={canInspectDoor ? () => activate('green-door') : undefined} />
     <GardenDetails />
-    {exhibits.map(item => <SceneExhibit key={item.id} portal={portal} item={item} active={item.id === selected} select={() => select(item.id)} />)}
+    {exhibits.filter(item => item.kind === 'character').map(item => {
+      const id = item.id as keyof typeof exteriorPlacements
+      const { base, turn } = exteriorPlacements[id]
+      return <group key={id} position={base} rotation-y={turn}
+        onClick={event => hotspotClick(event, () => select(id))}
+        onDoubleClick={event => hotspotClick(event, () => activate(id))}>
+        {id === 'bilbo' ? <Bilbo /> : <Gandalf />}
+      </group>
+    })}
+    <Hotspots portal={portal} entries={entries} selected={selected} select={select} activate={activate} />
   </>
 }

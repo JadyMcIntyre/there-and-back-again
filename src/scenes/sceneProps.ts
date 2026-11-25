@@ -7,6 +7,7 @@ export type SceneProps = {
   exhibits: Exhibit[]
   selected?: string
   select: (id: string) => void
+  activate: (id: string) => void
   doorOpen: boolean
   reduced: boolean
   active: boolean

@@ -47,7 +47,7 @@ export function AtlasPanel({ atlas, selected, pick, focus, href, chapter, close 
     </div>}
     <div className="field-actions">
       {place.scene ? <a className="gold-button" href={href('scene', place.scene.id)}>Visit {place.name} <ArrowRight size={17} /></a>
-        : <button className="gold-button" type="button" onClick={() => focus(place.id)}>Find on map <LocateFixed size={17} /></button>}
+        : <button className="gold-button" type="button" onClick={() => focus(place.id)} title="Focus selected landmark (F)">Find on map <LocateFixed size={17} /></button>}
       <a className="field-chapter" href={href('journal', place.id)}><BookOpen size={13} /> Location in the journal <ArrowRight size={13} /></a>
     </div>
   </aside>

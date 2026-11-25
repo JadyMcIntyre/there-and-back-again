@@ -2,11 +2,14 @@ import { createRef, useEffect, useMemo, useRef, useState, type ReactNode, type R
 import { Vector3 } from 'three'
 import { scenePlace, type Atlas } from '../content/spoilers'
 import { preloadScene, scenes, type SceneId } from '../scenes/registry'
+import { exteriorAnchors, interiorAnchors } from '../scenes/anchors'
 import { markerPosition } from './AtlasWorld'
 import type { CameraHandle, CameraPose } from './CameraRig'
 import Viewport, { CameraButtons, useMedia } from './Viewport'
 
 export type World = 'atlas' | SceneId
+export type WorldShortcuts = { reset: () => void, focus: () => void }
+
 type Phase = 'idle' | 'approach' | 'return' | 'dissolve'
 
 function nextFrame(signal: AbortSignal) {
@@ -27,17 +30,21 @@ async function until(ready: () => boolean, signal: AbortSignal) {
   return !signal.aborted
 }
 
-export default function WorldStage({ desired, atlas, selected, select, inspect, exhibit, doorOpen, focus, panelOpen,
-  atlasPose, cancel, children }: {
+export default function WorldStage({ desired, atlas, selected, select, activate, inspect, openExhibit, exhibit, doorOpen, focus, panelOpen, immersive,
+  atlasPose, cancel, shortcuts, children }: {
   desired: World
   atlas: Atlas
   selected?: string
   select: (id: string) => void
+  activate: (id: string) => void
+  openExhibit: (id: string) => void
+  shortcuts: RefObject<WorldShortcuts | null>
   inspect: (id: string) => void
   exhibit?: string
   doorOpen: boolean
   focus?: { id: string, time: number }
   panelOpen: boolean
+  immersive: boolean
   atlasPose: RefObject<CameraPose | undefined>
   cancel: (world: World) => void
   children: (shown: World, phase: Phase) => ReactNode
@@ -135,6 +142,24 @@ export default function WorldStage({ desired, atlas, selected, select, inspect, 
     return () => controller.abort()
   }, [drawn, focusPoint, focusTime, front, incoming])
 
+  useEffect(() => {
+    if (phase !== 'idle' || incoming) return
+    shortcuts.current = {
+      reset: () => { void camera.current?.move('home') },
+      focus: () => {
+        if (front === 'atlas') {
+          const place = atlas.landmarks.find(place => place.id === selected)
+          if (place) void camera.current?.focus(markerPosition(place))
+        } else if (exhibit && atlas.exhibits.some(item => item.id === exhibit)) {
+          const anchors: Record<string, import('three').Vector3Tuple> = front === 'bag-end' ? exteriorAnchors : interiorAnchors
+          const point = anchors[exhibit]
+          if (point) void camera.current?.focus(new Vector3(...point))
+        }
+      },
+    }
+    return () => { shortcuts.current = null }
+  }, [atlas, camera, exhibit, front, incoming, phase, selected, shortcuts])
+
   function layer(id: World) {
     const isScene = id !== 'atlas'
     const foreground = id === front
@@ -144,10 +169,10 @@ export default function WorldStage({ desired, atlas, selected, select, inspect, 
       ? atlas.exhibits.filter(item => item.location === landmark.id && scenes[id].exhibits.includes(item.id)) : []
     return <div key={id} className={`world-layer ${visible ? 'world-visible' : ''} ${foreground ? 'world-front' : 'world-incoming'}`}
       aria-hidden={!foreground || undefined} inert={!foreground || undefined} data-world={id}>
-      <Viewport atlas={atlas} selected={selected} select={select} scene={isScene ? id : undefined}
-        exhibits={exhibits} inspect={inspect} exhibit={exhibit} doorOpen={doorOpen}
+      <Viewport atlas={atlas} selected={selected} select={select} activate={activate} scene={isScene ? id : undefined}
+        exhibits={exhibits} inspect={inspect} openExhibit={openExhibit} exhibit={exhibit} doorOpen={doorOpen}
         camera={isScene ? sceneCameras[id] : map} initial={isScene ? roomPoses.current[id] : atlasPose.current}
-        active={foreground && !incoming} arriving={isScene && !foreground} locked={!!incoming || !foreground} reduced={reduced} panelOpen={panelOpen}
+        active={foreground && !incoming} arriving={isScene && !foreground} locked={!!incoming || !foreground} reduced={reduced} panelOpen={panelOpen} immersive={immersive}
         ready={() => { ready.current[id] = true; setDrawn(true) }}
         fail={() => { failed.current[id] = true; setDrawn(true) }} />
     </div>

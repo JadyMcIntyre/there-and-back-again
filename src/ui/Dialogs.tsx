@@ -1,5 +1,5 @@
-import { BookOpen, MapPin, Package, Search, UserRound, X } from 'lucide-react'
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { BookOpen, Compass, DoorOpen, MapPin, Package, Search, UserRound, X, type LucideIcon } from 'lucide-react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from 'react'
 import { enhancedEdition } from '../content/hobbit'
 import { useProgress } from '../content/progress'
 import { chapterNumbers, chapterRange, completeEvent, eventsForChapter } from '../content/reading'
@@ -7,14 +7,16 @@ import { at } from '../content/schema'
 import { comparePosition, type Atlas } from '../content/spoilers'
 import { useOfflineStatus } from './offline'
 import { roman } from './Roman'
+import { shortcuts, type Shortcut, type ShortcutActions } from './shortcuts'
 
-export function Modal({ name, close, children }: { name: string, close: () => void, children: ReactNode }) {
+export function Modal({ name, close, children, initialFocus }: { name: string, close: () => void, children: ReactNode, initialFocus?: RefObject<HTMLElement | null> }) {
   const dialog = useRef<HTMLDialogElement>(null)
   useEffect(() => {
     const node = dialog.current
     node?.showModal()
+    initialFocus?.current?.focus({ preventScroll: true })
     return () => { node?.close() }
-  }, [])
+  }, [initialFocus])
   return <dialog ref={dialog} className="dialog" aria-labelledby="dialog-title"
     onKeyDownCapture={event => {
       if (event.key === 'Escape') { event.preventDefault(); close() }
@@ -30,25 +32,52 @@ export function Modal({ name, close, children }: { name: string, close: () => vo
   </dialog>
 }
 
-export function SearchDialog({ atlas, close, navigate }: {
-  atlas: Atlas, close: () => void, navigate: (view: 'atlas' | 'journal', id: string) => void
+type Result = { id: string, title: string, subtitle?: string, group: string, icon: LucideIcon, run: () => void, hint?: string }
+
+export function CommandPalette({ atlas, world, close, navigate, visit, actions, canControl }: {
+  atlas: Atlas, world: Atlas, close: () => void, navigate: (view: 'atlas' | 'journal', id: string) => void,
+  visit: (id: string) => void, actions: ShortcutActions, canControl: boolean
 }) {
   const [query, setQuery] = useState('')
   const buttons = useRef<Array<HTMLButtonElement | null>>([])
   const input = useRef<HTMLInputElement>(null)
-  const results = atlas.searchResults(query)
+  const needle = query.trim().toLowerCase()
+  const commands = (Object.keys(shortcuts) as Shortcut[]).filter(id => id !== 'palette'
+    && (canControl || !['focus', 'reset', 'immersive'].includes(id)))
+  const entries: Result[] = atlas.searchResults(query).map(({ item, score }) => {
+    const place = 'region' in item
+    return {
+      id: item.id, title: item.name, subtitle: place ? item.region : item.subtitle,
+      group: score === 3 ? 'Related notes' : place ? 'Locations' : item.kind === 'object' ? 'Objects' : 'Characters',
+      icon: place ? MapPin : item.kind === 'object' ? Package : UserRound,
+      run: () => navigate(place && item.point ? 'atlas' : 'journal', item.id),
+    }
+  })
+  const recapResults: Result[] = needle ? atlas.chapters.flatMap(chapter => {
+    if (!chapter.recap || !`${chapter.title} chapter ${roman(chapter.number)} recap`.toLowerCase().includes(needle)) return []
+    const id = `chapter-${chapter.number}`
+    return [{ id, title: chapter.title, subtitle: `Chapter ${roman(chapter.number)} recap`, group: 'Chapter recaps', icon: BookOpen,
+      run: () => navigate('journal', id) }]
+  }) : []
+  const visitResults: Result[] = world.landmarks.flatMap(place => {
+    const id = place.scene?.id
+    if (!id || (needle && !`visit ${place.name}`.toLowerCase().includes(needle))) return []
+    return [{ id: `visit-${id}`, title: `Visit ${place.name}`, group: 'Places to visit', icon: DoorOpen, run: () => visit(id) }]
+  })
+  const actionResults: Result[] = commands.filter(id => shortcuts[id].label.toLowerCase().includes(needle)).map(id => ({
+    id, title: shortcuts[id].label, group: 'Quick actions', hint: shortcuts[id].hint, icon: Compass, run: actions[id],
+  }))
+  const results = [...entries.filter(entry => entry.group !== 'Related notes'), ...recapResults, ...visitResults, ...actionResults,
+    ...entries.filter(entry => entry.group === 'Related notes')]
+
   function open(index: number) {
-    const match = results[index]
-    if (!match) return
-    navigate('region' in match.item && match.item.point ? 'atlas' : 'journal', match.item.id)
-    close()
+    const selected = results[index]
+    if (!selected) return
+    if (selected.id !== 'help') close()
+    selected.run()
   }
-  function group(match: (typeof results)[number]) {
-    if (match.score === 3) return 'Related notes'
-    if ('region' in match.item) return 'Locations'
-    return match.item.kind === 'object' ? 'Objects' : 'Characters'
-  }
-  return <Modal name="Search the atlas" close={close}>
+
+  return <Modal name="Command palette" close={close} initialFocus={input}>
     <div onKeyDown={event => {
       if (!results.length) return
       if (event.key === 'Enter' && event.target === input.current) {
@@ -63,24 +92,29 @@ export function SearchDialog({ atlas, close, navigate }: {
       else buttons.current[next]?.focus()
     }}>
       <label className="search-field"><Search size={18} /><input ref={input} type="search" aria-label="Search discovered places and journal entries"
-        aria-controls="atlas-search-results" placeholder="Places, characters and objects" value={query}
-        onChange={event => setQuery(event.target.value)} autoFocus /></label>
-      <div className="search-results" id="atlas-search-results">
-        {query.trim() && !results.length && <p role="status">No discoveries match your search.</p>}
-        {!query.trim() && <p>Search discoveries available at your reading bookmark.</p>}
-        {results.map((match, index) => {
-          const { item } = match
-          const isPlace = 'region' in item
-          const Icon = isPlace ? MapPin : item.kind === 'object' ? Package : UserRound
-          return <div key={item.id}>
-            {(!results[index - 1] || group(results[index - 1]) !== group(match)) && <h3 className="result-group">{group(match)}</h3>}
-            <button ref={node => { buttons.current[index] = node }} type="button" onClick={() => open(index)}>
-              <Icon size={17} /><span>{item.name}<small>{isPlace ? item.region : item.subtitle}</small></span>
-            </button>
-          </div>
-        })}
+        aria-controls="atlas-search-results" placeholder="Search discoveries, recaps or actions" value={query}
+        onChange={event => setQuery(event.target.value)} /></label>
+      <div className="search-results command-results" id="atlas-search-results">
+        {needle && !results.length && <p role="status">No discoveries or actions match your search.</p>}
+        {results.map((result, index) => <div key={result.id}>
+          {results[index - 1]?.group !== result.group && <h3 className="result-group">{result.group}</h3>}
+          <button ref={node => { buttons.current[index] = node }} type="button" onClick={() => open(index)}>
+            <result.icon size={17} /><span>{result.title}{result.subtitle && <small>{result.subtitle}</small>}</span>
+            {result.hint && <kbd>{result.hint}</kbd>}
+          </button>
+        </div>)}
       </div>
     </div>
+  </Modal>
+}
+
+export function ShortcutDialog({ close }: { close: () => void }) {
+  return <Modal name="Keyboard shortcuts" close={close}>
+    <dl className="shortcut-guide">
+      {Object.entries(shortcuts).map(([id, entry]) => <div key={id}><dt>{entry.label}</dt><dd><kbd>{entry.hint}</kbd></dd></div>)}
+      <div><dt>Explore unlocked chapters from the chapter trail</dt><dd><kbd>← / →</kbd></dd></div>
+      <div><dt>Dismiss a dialog or hotspot tooltip</dt><dd><kbd>Esc</kbd></dd></div>
+    </dl>
   </Modal>
 }
 

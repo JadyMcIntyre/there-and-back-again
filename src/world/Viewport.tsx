@@ -71,6 +71,7 @@ export function CameraButtons({ camera, atlas }: { camera: RefObject<CameraHandl
     <details className="controls-help">
       <summary aria-label="Camera guide" title="Camera guide"><CircleHelp size={17} /></summary>
       <div><strong>Explore the view</strong><p>Drag to orbit. Shift-drag, Cmd/Ctrl-drag, middle-drag or right-drag to pan. Scroll to zoom.</p>
+        <p><kbd>F</kbd> focuses the selection. <kbd>R</kbd> resets the view. <kbd>?</kbd> shows shortcuts.</p>
         <p>Touch drag to orbit. Use two fingers to pan or pinch. With the view focused, use arrow keys to pan.</p>
         {atlas && <div className="camera-presets">
           <button onClick={() => camera.current?.move('plan')}>Top-down</button>
@@ -81,16 +82,18 @@ export function CameraButtons({ camera, atlas }: { camera: RefObject<CameraHandl
     <div className="map-controls"  aria-label="Camera controls">
       <button type="button" title="Zoom in" aria-label="Zoom in" onClick={() => camera.current?.move('in')}><Plus size={18} /></button>
       <button type="button" title="Zoom out" aria-label="Zoom out" onClick={() => camera.current?.move('out')}><Minus size={18} /></button>
-      <button type="button" title="Reset camera" aria-label="Reset camera" onClick={() => camera.current?.move('home')}><LocateFixed size={17} /></button>
+      <button type="button" title="Reset camera (R)" aria-label="Reset camera" onClick={() => camera.current?.move('home')}><LocateFixed size={17} /></button>
     </div>
   </>
 }
 
-export default function Viewport({ atlas, selected, select, scene, exhibits, inspect, exhibit, doorOpen, camera,
-  initial, arriving, locked, panelOpen, reduced, ready, fail, active }: {
+export default function Viewport({ atlas, selected, select, activate, scene, exhibits, inspect, openExhibit, exhibit, doorOpen, camera,
+  initial, arriving, locked, panelOpen, immersive, reduced, ready, fail, active }: {
   atlas: Atlas
   selected?: string
   select: (id: string) => void
+  activate: (id: string) => void
+  openExhibit: (id: string) => void
   scene?: SceneId
   exhibits: Exhibit[]
   exhibit?: string
@@ -102,6 +105,7 @@ export default function Viewport({ atlas, selected, select, scene, exhibits, ins
   arriving: boolean
   locked: boolean
   panelOpen: boolean
+  immersive: boolean
   reduced: boolean
   ready: () => void
   fail: () => void
@@ -124,18 +128,18 @@ export default function Viewport({ atlas, selected, select, scene, exhibits, ins
     void camera.current?.move(action)
   }} className={`viewport ${Scene ? 'garden-viewport' : ''} ${scene === 'bag-end-interior' ? 'interior-viewport' : ''}`} aria-label={scene === 'bag-end-interior' ? 'Interactive Bag End interior' : Scene ? 'Interactive Bag End diorama' : 'Interactive atlas map'}>
     <div className="map-grid" aria-hidden />
-    <div ref={labelPortal} className="world-label-portal" />
+    <div ref={labelPortal} className="world-label-portal" inert={locked || undefined} />
     <ViewErrorBoundary fail={fail}>
       <Canvas orthographic camera={{ position: composition.eye, near: 0.1, far: 430 }}
         dpr={compact ? [1, 1.25] : [1, 1.65]} shadows frameloop="demand"
         gl={{ antialias: true, alpha: true, toneMapping: ACESFilmicToneMapping }}
         fallback={<p className="view-status" role="status">The 3D view needs WebGL. Explore with the field notes.</p>}>
         <Lighting scene={!!Scene} interior={scene === 'bag-end-interior'} compact={compact} />
-        <CameraRig scene={!!Scene} composition={composition} compact={compact} panelOpen={panelOpen} locked={locked}
+        <CameraRig scene={!!Scene} composition={composition} compact={compact} panelOpen={compact ? panelOpen : !immersive} locked={locked}
           reduced={reduced} handle={camera} initial={initial} arriving={arriving} />
         <Suspense fallback={null}>
-          {Scene ? <Scene portal={labelPortal} compact={compact} exhibits={exhibits} selected={exhibit} select={inspect} doorOpen={doorOpen} reduced={reduced} active={active} />
-            : <AtlasWorld portal={labelPortal} atlas={atlas} compact={compact} reduced={reduced} selected={selected} select={select} />}
+          {Scene ? <Scene portal={labelPortal} compact={compact} exhibits={exhibits} selected={exhibit} select={id => { if (!locked) inspect(id) }} activate={id => { if (!locked) openExhibit(id) }} doorOpen={doorOpen} reduced={reduced} active={active} />
+            : <AtlasWorld portal={labelPortal} atlas={atlas} compact={compact} reduced={reduced} selected={selected} select={id => { if (!locked) select(id) }} activate={id => { if (!locked) activate(id) }} focus={point => { if (!locked) void camera.current?.focus(point) }} />}
           <FirstFrame ready={ready} />
         </Suspense>
       </Canvas>

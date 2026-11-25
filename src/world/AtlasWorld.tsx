@@ -1,7 +1,4 @@
-import { Html } from '@react-three/drei'
-import { useFrame, useThree } from '@react-three/fiber'
-import { Compass, MapPin } from 'lucide-react'
-import { useEffect, useMemo, useRef, type RefObject } from 'react'
+import { useEffect, useMemo, type RefObject } from 'react'
 import {
   BoxGeometry, CircleGeometry, DoubleSide, DodecahedronGeometry, Vector3,
 } from 'three'
@@ -13,8 +10,10 @@ import { makeTerrain, makeWater, terrainHeight, withinLand } from './terrain'
 import { mix } from './math'
 import DiscoveryMist from './DiscoveryMist'
 import { Settlements } from './Landmarks'
+import { Hotspots } from './Hotspots'
+import { hotspotClick } from './hotspotEvents'
 
-function Ground({ compact }: { compact: boolean }) {
+function Ground({ compact, focus }: { compact: boolean, focus: (point: Vector3) => void }) {
   const terrain = useMemo(() => makeTerrain(compact), [compact])
   const waters = useMemo(() => [makeWater(false), makeWater(true)], [])
   useEffect(() => () => {
@@ -24,7 +23,7 @@ function Ground({ compact }: { compact: boolean }) {
   useEffect(() => () => waters.forEach(water => water.dispose()), [waters])
 
   return <>
-    <mesh geometry={terrain.surface} castShadow receiveShadow>
+    <mesh geometry={terrain.surface} castShadow receiveShadow onDoubleClick={event => hotspotClick(event, () => focus(event.point))}>
       <meshStandardMaterial vertexColors roughness={0.96} />
     </mesh>
     <mesh geometry={terrain.wall} receiveShadow>
@@ -36,9 +35,18 @@ function Ground({ compact }: { compact: boolean }) {
   </>
 }
 
-function Woodlands({ compact, showFields }: { compact: boolean, showFields: boolean }) {
+function Woodlands({ compact, landmarks }: { compact: boolean, landmarks: Atlas['landmarks'] }) {
   const trees = useMemo(makeTrees, [])
   const forest = useMemo(() => plantForests(compact), [compact])
+  const treesOutsideBuildings = useMemo(() => {
+    const clearings = landmarks.filter(place => ['bag-end','rivendell','beorn','green-dragon'].includes(place.id))
+    const outside = ({ position: [x, , z] }: Plant) => clearings.every(place => {
+      const [px,pz] = place.point
+      if (place.id === 'bag-end') return Math.hypot((x-px)*1.05,(z-pz-3)*.67) > 5.35
+      return Math.hypot(x-px,z-pz) > (place.id === 'beorn' ? 3.6 : 2.0)
+    })
+    return { trunks: forest.trunks.filter(outside), pines: forest.pines.filter(outside), crowns: forest.crowns.filter(outside) }
+  }, [forest, landmarks])
   const rock = useMemo(() => new DodecahedronGeometry(1, 0), [])
   const field = useMemo(() => new BoxGeometry(2, 1, 2), [])
   useEffect(() => () => {
@@ -48,11 +56,11 @@ function Woodlands({ compact, showFields }: { compact: boolean, showFields: bool
   }, [trees, rock, field])
 
   return <>
-    <Instances geometry={trees.trunk} plants={forest.trunks} shadows={false}><meshStandardMaterial roughness={0.97} /></Instances>
-    <Instances geometry={trees.conifer} plants={forest.pines}><meshStandardMaterial roughness={0.94} flatShading /></Instances>
-    <Instances geometry={trees.crown} plants={forest.crowns}><meshStandardMaterial roughness={0.97} flatShading /></Instances>
+    <Instances geometry={trees.trunk} plants={treesOutsideBuildings.trunks} shadows={false}><meshStandardMaterial roughness={0.97} /></Instances>
+    <Instances geometry={trees.conifer} plants={treesOutsideBuildings.pines}><meshStandardMaterial roughness={0.94} flatShading /></Instances>
+    <Instances geometry={trees.crown} plants={treesOutsideBuildings.crowns}><meshStandardMaterial roughness={0.97} flatShading /></Instances>
     <Instances geometry={rock} plants={forest.boulders} shadows={false}><meshStandardMaterial roughness={0.96} flatShading /></Instances>
-    {showFields && <Instances geometry={field} plants={forest.fields} shadows={false}><meshStandardMaterial roughness={1} /></Instances>}
+    {landmarks.some(place => place.id === 'bag-end') && <Instances geometry={field} plants={forest.fields} shadows={false}><meshStandardMaterial roughness={1} /></Instances>}
   </>
 }
 
@@ -79,8 +87,8 @@ function markJourney(routes: Route[]) {
 }
 
 function Journey({ routes }: { routes: Route[] }) {
-  const geometry = useMemo(() => new CircleGeometry(0.30, 10).rotateX(-Math.PI / 2), [])
-  const edge = useMemo(() => new CircleGeometry(0.39, 10).rotateX(-Math.PI / 2).translate(0, -0.017, 0), [])
+  const geometry = useMemo(() => new CircleGeometry(0.23, 10).rotateX(-Math.PI / 2), [])
+  const edge = useMemo(() => new CircleGeometry(0.29, 10).rotateX(-Math.PI / 2).translate(0, -0.017, 0), [])
   const marks = useMemo(() => markJourney(routes), [routes])
   const outline = useMemo(() => marks.map(mark => ({ ...mark, color: '#7d5d36' })), [marks])
   useEffect(() => () => { geometry.dispose(); edge.dispose() }, [geometry, edge])
@@ -96,77 +104,23 @@ const prominent = new Set(['bag-end', 'rivendell', 'high-pass', 'carrock', 'beor
 export const markerPosition = ({ point: [x, z], id }: PlaceLabel) =>
   new Vector3(x, terrainHeight(x, z) + (id === 'bag-end' ? 2.9 : id === 'carrock' ? 2.5 : 2.15), z)
 
-const centerOverlay = (_object: unknown, _camera: unknown, size: { width: number, height: number }) => [size.width / 2, size.height / 2]
-
-type PinBox = { x: number, y: number, width: number }
-function Markers({ places, compact, selected, select, portal }: {
-  places: PlaceLabel[], compact: boolean, selected?: string, select: (id: string) => void, portal: RefObject<HTMLDivElement | null>
-}) {
-  const elements = useRef(new Map<string, HTMLButtonElement>())
-  const invalidate = useThree(state => state.invalidate)
-  const markers = useMemo(() => places.map(place => ({ ...place, position: markerPosition(place) }))
-    .sort((a, b) => Number(b.id === selected) - Number(a.id === selected)
-      || Number(prominent.has(b.id)) - Number(prominent.has(a.id))), [places, selected])
-  const projected = useMemo(() => new Vector3(), [])
-
-  useFrame(({ camera, size }) => {
-    camera.updateMatrixWorld()
-    const occupied: PinBox[] = []
-    for (const entry of markers) {
-      const button = elements.current.get(entry.id)
-      if (!button) continue
-      projected.copy(entry.position).project(camera)
-      const x = (0.5 + projected.x * 0.5) * size.width
-      const y = (0.5 - projected.y * 0.5) * size.height
-      const main = selected === entry.id
-      const width = Math.min(155, entry.name.length * 5.6 + 31)
-      const clear = (span: number) => occupied.every(box => Math.abs(box.y - y) >= 28 || Math.abs(box.x - x) >= (box.width + span) / 2 + 4)
-      const detail = 'zoom' in camera && Number(camera.zoom) > (compact ? 9 : 14)
-      const label = main || ((!compact && prominent.has(entry.id) || detail) && x > width / 2 && x < size.width - width / 2 && clear(width))
-      const state = label ? 'label' : clear(21) ? 'dot' : 'crowded'
-      if (state !== 'crowded') occupied.push({ x, y, width: label ? width : 21 })
-      const transform = `translate3d(${x}px, ${y}px, 0)`
-      if (button.parentElement?.style.transform !== transform && button.parentElement) {
-        button.parentElement.style.transform = transform
-      }
-      if (button.dataset.marker !== state) button.dataset.marker = state
-      const stacking = main ? '4' : label ? '3' : state === 'dot' ? '2' : '1'
-      if (button.parentElement && button.parentElement.style.zIndex !== stacking) button.parentElement.style.zIndex = stacking
-    }
-  })
-
-  return <Html portal={portal as RefObject<HTMLElement>} fullscreen calculatePosition={centerOverlay} className="atlas-pin-overlay" zIndexRange={[16, 15]}
-    style={{ pointerEvents: 'none' }}>
-    {markers.map(entry => {
-      const active = entry.id === selected
-      return <div key={entry.id} className="atlas-pin-position">
-        <button ref={node => {
-          if (node) { elements.current.set(entry.id, node); invalidate() }
-          else elements.current.delete(entry.id)
-        }}
-          type="button" className={`map-pin atlas-pin ${active ? 'active' : ''}`} aria-label={`Select ${entry.name}`}
-          aria-pressed={active} onClick={() => select(entry.id)}>
-          <span>{active ? <Compass size={13} aria-hidden /> : <MapPin size={11} aria-hidden />}</span><strong>{entry.name}</strong>
-        </button>
-      </div>
-    })}
-  </Html>
-}
-
-export default function AtlasWorld({ atlas, compact, selected, select, portal, reduced }: {
+export default function AtlasWorld({ atlas, compact, selected, select, activate, focus, portal, reduced }: {
   atlas: Atlas
   compact: boolean
   reduced: boolean
   selected?: string
   select: (id: string) => void
+  activate: (id: string) => void
+  focus: (point: Vector3) => void
   portal: RefObject<HTMLDivElement | null>
 }) {
+  const entries = useMemo(() => atlas.landmarks.map(place => ({ ...place, position: markerPosition(place).toArray(), prominent: prominent.has(place.id) })), [atlas.landmarks])
   return <>
-    <Ground compact={compact} />
-    <Woodlands compact={compact} showFields={atlas.landmarks.some(place => place.id === 'bag-end')} />
-    <Settlements landmarks={atlas.landmarks} />
+    <Ground compact={compact} focus={focus} />
+    <Woodlands compact={compact} landmarks={atlas.landmarks} />
+    <Settlements landmarks={atlas.landmarks} select={(event, id) => hotspotClick(event, () => select(id))} activate={(event, id) => hotspotClick(event, () => activate(id))} />
     <Journey routes={atlas.routes} />
     <DiscoveryMist landmarks={atlas.landmarks} compact={compact} reduced={reduced} />
-    <Markers portal={portal} places={atlas.landmarks} compact={compact} selected={selected} select={select} />
+    <Hotspots portal={portal} entries={entries} atlas compact={compact} selected={selected} select={select} activate={activate} />
   </>
 }
