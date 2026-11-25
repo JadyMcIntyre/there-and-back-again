@@ -512,8 +512,6 @@ h1, h2, p { margin: 0; }
 @media (max-width:760px) { .trail-scroll { display:none; } }
 .journal-sections { position:sticky; top:56px; z-index:8; background:#f1eadb; padding-block:5px; }
 @media (max-width:760px) { .journal-sections { top:49px; } }
-.scene-moment { display:flex; flex-wrap:wrap; gap:4px 7px; align-items:center; justify-content:space-between; color:#ead9b6; margin:3px 14px 5px; font-size:11px; }
-.scene-moment select { border:1px solid #a49064; border-radius:4px; color:#f0e4c8; background:#364d36; font:inherit; padding:4px; max-width:100%; }
 
 .hotspot-anchor { position: absolute; inset: 0 auto auto 0; pointer-events: none; }
 .hotspot-anchor[data-occluded] { visibility: hidden; }
@@ -543,3 +541,32 @@ kbd { display: inline-block; padding: 2px 5px; border: 1px solid #d5c6a4; border
 .shortcut-guide { padding: 0; margin: 0; }
 .shortcut-guide div { display: flex; justify-content: space-between; gap: 12px; align-items: center; border-bottom: 1px solid #e4d9bb; padding: 9px 2px; }
 .shortcut-guide dd { margin: 0; }
+
+.world-layer .garden-viewport { background: #9fac93; }
+.world-layer .interior-viewport { background: #514032; }
+.location-modes { pointer-events: auto; display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; margin-top: 8px; border: 1px solid #cabe9d; border-radius: 7px; background: #f8eed6f7; }
+.location-modes button { padding: 6px 10px; border: 0; border-radius: 4px; color: #344b36; font-size: 11px; font-weight: 650; background: transparent; }
+.location-modes button[aria-pressed="true"] { background: #344b36; color: #fff2d6; }
+.location-modes button:not([aria-pressed="true"]):hover { background: #e7ddbe; }
+.location-modes button:disabled { opacity: .55; }
+.field-secondary { background: transparent; border: 1px solid #b5a57780; border-radius: 5px; display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; width: 100%; color: #f9dfaa; font-size: 12px; }
+.field-secondary:hover { background: #f6efd512; }
+.walk-chrome { pointer-events: none; position: absolute; inset: 0; z-index: 2; }
+.walk-reticle { width: 7px; height: 7px; border: 1px solid #faf0d8; border-radius: 50%; box-shadow: 0 0 0 1px #2e3429; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); }
+.walk-interact { pointer-events: auto; position: absolute; top: calc(50% + 18px); left: 50%; transform: translateX(-50%); border: 1px solid #cdb789; border-radius: 6px; background: #fbf0d9ed; padding: 7px 11px; box-shadow: 0 3px 13px #241b16a3; color: #344b36; font-size: 13px; font-weight: 650; white-space: nowrap; }
+.walk-guide { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); width: max-content; max-width: 70vw; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 5px 9px; border-radius: 5px; color: #fff3db; background: #222d23df; font-size: 11px; }
+.walk-guide button { display: inline-flex; align-items: center; gap: 4px; pointer-events: auto; border: 0; color: #fbebcb; background: transparent; }
+.walk-guide b { padding-inline: 3px; opacity: .65; }
+@media (max-width: 760px) {
+  .location-modes { margin-top: 5px; }
+  .location-modes button { padding: 5px 8px; }
+}
+
+.location-moments { position: relative; color: #344b36; font-size: 11px; }
+.location-moments summary { list-style: none; cursor: pointer; padding: 6px 10px; border-radius: 4px; font-weight: 650; }
+.location-moments summary::-webkit-details-marker { display: none; }
+.location-moments summary::after { content: "▾"; margin-left: 4px; }
+.location-moments summary:hover, .location-moments[open] summary { background: #e7ddbe; }
+.location-moments label { position: absolute; z-index: 3; top: calc(100% + 7px); left: 0; display: grid; gap: 6px; min-width: 158px; padding: 9px; border: 1px solid #cabe9d; border-radius: 6px; background: #fbf1db; box-shadow: 0 4px 15px #42391835; }
+.location-moments select { color: #344b36; border: 1px solid #cabe9d; padding: 4px; border-radius: 3px; background: #f1e7d0; }
+@media (max-width: 760px) { .location-moments label { left: auto; right: 0; } }

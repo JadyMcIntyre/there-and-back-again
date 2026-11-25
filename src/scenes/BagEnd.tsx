@@ -11,8 +11,9 @@ import { Model } from '../world/Models'
 import { Bilbo, Gandalf } from './Figures'
 import { ChimneySmoke } from './ChimneySmoke'
 import type { SceneProps } from './sceneProps'
+import { Countryside, GardenSurface } from './Countryside'
 import { BagEndThreshold } from './interiors/BagEndThreshold'
-import { gardenHeight, gardenPlants, grassGeometry, makeGarden, pathCenter } from './garden'
+import { gardenHeight, gardenPlants, grassGeometry, pathCenter } from './garden'
 
 import { Hotspots } from '../world/Hotspots'
 import { hotspotClick } from '../world/hotspotEvents'
@@ -21,15 +22,14 @@ const archTop = (x: number) => 1.15 + 2.74 * Math.max(0, 1 - (x / 5.35) ** 2) **
 const stoneShades = ['#a69679', '#b3a082', '#847b69', '#988870', '#a9987f', '#c0ae91']
 
 function Garden({ compact }: { compact: boolean }) {
-  const terrain = useMemo(makeGarden, [])
   const { blades, flowers, hedges } = useMemo(() => gardenPlants(compact), [compact])
   const grass = useMemo(grassGeometry, [])
   const petal = useMemo(() => new DodecahedronGeometry(0.048, 0).scale(1, 0.7, 1), [])
   const foliage = useMemo(() => new DodecahedronGeometry(1, 1), [])
-  useEffect(() => () => [terrain, grass, petal, foliage].forEach(geometry => geometry.dispose()), [terrain, grass, petal, foliage])
+  useEffect(() => () => [grass, petal, foliage].forEach(geometry => geometry.dispose()), [grass, petal, foliage])
 
   return <>
-    <mesh geometry={terrain} receiveShadow castShadow><meshStandardMaterial vertexColors roughness={1} /></mesh>
+    <GardenSurface />
     <Instances geometry={grass} plants={blades} shadows={false}><meshStandardMaterial side={DoubleSide} roughness={0.98} /></Instances>
     <Instances geometry={foliage} plants={hedges}><meshStandardMaterial flatShading roughness={0.96} /></Instances>
     <Instances geometry={petal} plants={flowers} shadows={false}><meshStandardMaterial roughness={0.84} /></Instances>
@@ -42,10 +42,10 @@ function RoughSteps() {
     const rng = random(433)
     const result: Plant[] = []
     for (let i = 0; i < 15; i++) {
-      const z = 1.24 + i * 0.38
+      const z = 1.16 + i * 0.42
       const x = pathCenter(z) + (rng() - 0.5) * 0.53
       const size = 0.36 + rng() * 0.19
-      result.push({ position: [x, gardenHeight(x, z) + (i < 3 ? 0.08 : 0.032), z], scale: [size * 1.65, size * (i < 3 ? 0.42 : 0.19), size * 0.54], turn: (rng() - 0.5) * 0.55, color: stoneShades[i % stoneShades.length] })
+      result.push({ position: [x, gardenHeight(x, z) + (i < 3 ? 0.008 : 0.013), z], scale: [size * 1.65, size * (i < 3 ? 0.12 : 0.08), size * 0.54], turn: (rng() - 0.5) * 0.55, color: stoneShades[i % stoneShades.length] })
     }
     return result
   }, [])
@@ -298,10 +298,11 @@ function House({ open, reduced, select, activate }: { open: boolean, reduced: bo
   </>
 }
 
-export default function BagEnd({ compact, exhibits, selected, select, activate, doorOpen, reduced, portal, active }: SceneProps) {
+export default function BagEnd({ compact, exhibits, selected, select, activate, doorOpen, reduced, portal, active, mode, morning }: SceneProps) {
   const entries = exhibits.map(item => ({ ...item, position: exteriorAnchors[item.id] }))
   const canInspectDoor = exhibits.some(item => item.id === 'green-door')
   return <>
+    <Countryside compact={compact} morning={morning} />
     <Garden compact={compact} />
     <OrchardTree position={gardenPosition(-4.7, -2.55)} scale={1.37} />
     <OrchardTree position={gardenPosition(-7.75, -0.1)} scale={0.85} autumn />
@@ -313,12 +314,12 @@ export default function BagEnd({ compact, exhibits, selected, select, activate, 
     {exhibits.filter(item => item.kind === 'character').map(item => {
       const id = item.id as keyof typeof exteriorPlacements
       const { base, turn } = exteriorPlacements[id]
-      return <group key={id} position={base} rotation-y={turn}
+      return <group key={id} position={base} rotation-y={turn + (morning ? (id === 'bilbo' ? .26 : -.22) : 0)}
         onClick={event => hotspotClick(event, () => select(id))}
         onDoubleClick={event => hotspotClick(event, () => activate(id))}>
         {id === 'bilbo' ? <Bilbo /> : <Gandalf />}
       </group>
     })}
-    <Hotspots portal={portal} entries={entries} selected={selected} select={select} activate={activate} />
+    {mode !== 'walk' && <Hotspots portal={portal} entries={entries} selected={selected} select={select} activate={activate} />}
   </>
 }

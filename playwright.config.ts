@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
-const baseURL = 'http://127.0.0.1:4173'
+const port = Number(process.env.ATLAS_TEST_PORT) || 4173
+const baseURL = `http://127.0.0.1:${port}`
 export default defineConfig({
   testDir: './tests',
   workers: 1,
@@ -15,7 +16,7 @@ export default defineConfig({
     launchOptions: { args: ['--enable-webgl', '--ignore-gpu-blocklist'] },
   },
   webServer: {
-    command: 'npm run preview -- --host 127.0.0.1 --strictPort',
+    command: `npm run preview -- --host 127.0.0.1 --port ${port} --strictPort`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
   },

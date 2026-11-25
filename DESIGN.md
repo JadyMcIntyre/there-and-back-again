@@ -72,7 +72,7 @@ Prioritise cohesive art direction over using every available asset.
 
 ## Reference image interpretation
 
-All six visual reference images are available in `references/design/`.
+The six original references are available in `references/design/`. Five additional references under `references/design/immersive/` inform eye-level composition, lighting, architecture and material detail.
 
 The desired artistic direction is stylised realism with handcrafted miniature environments, rather than simplistic low-poly graphics.
 
@@ -90,3 +90,11 @@ Use the existing asset packs as building blocks. Enhance them with custom materi
 Do not use narrative information visible in the reference screenshots as source material. The supplied book remains the source of truth, and strict spoiler protection applies.
 
 Avoid generic low-poly demo scenes, flat terrain, excessive visual clutter and inconsistent art styles.
+
+## Immersive locations
+
+The miniature atlas is the discovery view. Entering a location changes to a perspective environment with natural surroundings or enclosed architecture. Bag End composes the view around a curved footpath, framed garden, layered woodland and open sky. Inside, the timber-lined entrance, lamps and rug lead to warm furnished areas and the animated hearth. Camera limits keep the reader above the ground and within the finished space.
+
+Walk uses a restrained reticle and a context prompt that appears for visible, nearby discoveries. Entering and peeking at the door are distinct actions. The garden preview uses a fitted timber passage, with a matching entrance composition in the separately loaded interior. Interior Dollhouse uses the same furnishings with the enclosing walls and roof opened for inspection. Historical settings use the visible chapter facts for exhibits, table settings and light.
+
+The private immersive references inform broad composition and atmosphere. The runtime scene uses original geometry and the licensed local resources listed in ASSETS.md. The written source governs descriptive facts.

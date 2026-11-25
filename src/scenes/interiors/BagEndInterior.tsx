@@ -4,6 +4,7 @@ import type { Group, MeshStandardMaterial, PointLight, Vector3Tuple } from 'thre
 import { random } from '../../world/math'
 import { Hotspots } from '../../world/Hotspots'
 import { interiorAnchors } from '../anchors'
+import { entrance } from '../bagEndPlan'
 import { hotspotClick } from '../../world/hotspotEvents'
 import type { SceneProps } from '../sceneProps'
 import { useAmbientFrames } from '../ambient'
@@ -126,10 +127,13 @@ function Fire({ active, reduced, compact }: Pick<SceneProps, 'active' | 'reduced
     <Timber at={[0,.36,.40]} size={[1.05,.16,.37]} angle={.24} color="#533824" />
     <Timber at={[0,.42,.42]} size={[.91,.14,.29]} angle={-.38} color="#64402a" />
     <group ref={fire} position={[0,.43,.46]}>
-      {[-.31,.0,.31].map((x,i) => <mesh key={x} position={[x,.26+i*.03,0]} scale={[.21,.45+(i%2)*.21,.14]} rotation-z={(i-1)*-.13}>
-        <sphereGeometry args={[1,16,11]} /><meshStandardMaterial ref={i===1 ? ember : undefined} color="#db7d33" emissive="#ee6c19" emissiveIntensity={1.08} />
+      {[-.31,.0,.31].map((x,i) => <mesh key={x} position={[x,.32+i*.025,0]} scale={[1,1+i%2*.4,.48]} rotation-z={(i-1)*-.23}>
+        <coneGeometry args={[.25,.67,12]} /><meshStandardMaterial ref={i===1 ? ember : undefined} color="#ef9738" emissive="#ee6c19" emissiveIntensity={1.04} />
       </mesh>)}
-      <mesh position={[.0,.29,.14]} scale={[.19,.35,.10]}><sphereGeometry args={[1,16,11]} /><meshStandardMaterial color="#f6bc58" emissive="#ffb439" emissiveIntensity={1.35} /></mesh>
+      <mesh position={[.06,.26,.11]} scale={[1,1,.57]} rotation-z={-.17}><coneGeometry args={[.167,.51,12]} /><meshStandardMaterial color="#f7cf74" emissive="#ffae39" emissiveIntensity={1.28} /></mesh>
+      {[-.42,-.21,.09,.35].map((x,i) => <mesh key={x} position={[x,.025,.27-i*.035]}>
+        <dodecahedronGeometry args={[.068,0]} /><meshStandardMaterial color="#a54c21" emissive="#df5214" emissiveIntensity={.64} />
+      </mesh>)}
     </group>
   </group>
 }
@@ -151,7 +155,7 @@ function HouseShell() {
       <Timber at={[0,1.16,.03]} size={[5.75,.17,.45]} color={walnut} />
       {Array.from({length:10}, (_,i) => <Timber key={i} at={[-2.55+i*.55,.6,.16]} size={[.47,.83,.12]} color={planks[i%5]} />)}
     </group>
-    <group position={[1.52,1.38,-5.00]}>
+    <group position={[1.52,1.44,-4.77]}>
       <mesh><circleGeometry args={[1.27,48]} /><meshStandardMaterial color="#65734c" roughness={.95} /></mesh>
       {[-.8,-.4,0,.4,.8].map(x => <Timber key={x} at={[x,0,.014]} size={[.021,2*Math.sqrt(1.25**2-x*x),.01]} color="#4c583b" />)}
       <Moulding center={[0,0,.07]} radius={1.29} color="#805a38" thickness={.15} />
@@ -165,11 +169,54 @@ function HouseShell() {
 }
 
 
-export default function BagEndInterior({ exhibits, select, activate, selected, portal, active, reduced, compact }: SceneProps) {
+function Lantern({ x, z, side = 1 }: { x: number, z: number, side?: number }) {
+  return <group position={[x,2.62,z]} rotation-y={side*Math.PI/2}>
+    <Timber at={[0,0,0]} size={[.18,.39,.15]} color="#583b28" />
+    <Timber at={[0,-.14,.16]} size={[.27,.08,.33]} color="#765133" />
+    <mesh position={[0,.045,.245]}><boxGeometry args={[.139,.26,.15]} /><meshStandardMaterial color="#f9c481" emissive="#e3883e" emissiveIntensity={1.4} roughness={.47} /></mesh>
+    <pointLight position={[0,.08,.5]} intensity={9.8} distance={4.8} color="#ffbd78" />
+  </group>
+}
+
+function Enclosure() {
+  return <>
+    <Timber at={[0,4.7,.13]} size={[17.4,.23,10.62]} color="#825c41" />
+    {[-8.48,8.38].map(x => <group key={x} position={[x,0,.12]} rotation-y={Math.PI/2}>
+      <Timber at={[0,2.32,0]} size={[10.59,4.67,.26]} color="#b38a62" />
+      <Timber at={[0,.73,Math.sign(-x)*.14]} size={[10.65,1.36,.10]} color="#8b5d3d" />
+      <Timber at={[0,1.43,Math.sign(-x)*.18]} size={[10.65,.15,.16]} color="#61442d" />
+      {Array.from({ length: 19 }, (_, i) => <Timber key={i} at={[-5.03+i*.56,.77,Math.sign(-x)*.198]} size={[.040,1.18,.044]} color="#6d4c32" />)}
+    </group>)}
+    {[3.95,1.3,-1.55,-4.6].map(z => <Timber key={z} at={[0,4.50,z]} size={[17.1,.31,.28]} color="#68462d" />)}
+    <Timber at={[0,2.34,entrance.z]} size={[17.3,4.67,.28]} color="#a17651" />
+    <Timber at={[0,.73,entrance.z-.18]} size={[17.3,1.4,.10]} color="#895b3e" />
+    <group position={[entrance.x,1.50,entrance.z-.27]} rotation-y={Math.PI}>
+      <mesh castShadow><circleGeometry args={[1.18,48]} /><meshStandardMaterial color="#536141" roughness={.87} /></mesh>
+      <Moulding center={[0,0,.015]} radius={1.24} color="#845834" thickness={.105} />
+      {[-.86,-.58,-.29,0,.29,.58,.86].map(x => <Timber key={x} at={[x,0,.02]} size={[.025,2*Math.sqrt(1.34-x*x),.012]} color="#39462e" />)}
+      <mesh position-z={.11}><sphereGeometry args={[.078,18,12]} /><meshStandardMaterial color="#cba051" metalness={.43} roughness={.36} /></mesh>
+    </group>
+    {[-.04,3.08].map((x, i) => <group key={x}>
+      <Timber at={[x,2.28,4.12]} size={[.22,4.44,2.37]} color="#ab8059" />
+      <Timber at={[x+(i ? -.14 : .14),.78,4.12]} size={[.09,1.36,2.41]} color="#98623d" />
+      <Timber at={[x,2.23,2.91]} size={[.34,4.50,.19]} color="#6b492f" />
+      <Timber at={[x+(i ? -.16 : .16),1.48,4.12]} size={[.13,.13,2.37]} color="#674329" />
+      {Array.from({ length: 6 }, (_, n) => <Timber key={n} at={[x+(i ? -.19 : .19),.73,3.1+n*.39]} size={[.048,1.21,.058]} color="#714b30" />)}
+      <Lantern x={x+(i ? -.12 : .12)} z={3.65} side={i ? -1 : 1} />
+    </group>)}
+    <Lantern x={-8.15} z={3.1} />
+    <Lantern x={8.05} z={3.1} side={-1} />
+    <pointLight position={[1.52,3.53,4.44]} color="#ffc78a" intensity={16} distance={6.5} />
+  </>
+}
+
+export default function BagEndInterior({ exhibits, select, activate, selected, portal, active, reduced, compact, mode, morning }: SceneProps) {
   const entries = exhibits.map(item => ({ ...item, position: interiorAnchors[item.id as keyof typeof interiorAnchors] }))
   const gathering = exhibits.some(item => item.id === 'thror-map')
   return <>
+    <color attach="background" args={['#423427']} />
     <Floor />
+    {mode !== 'dollhouse' && <Enclosure />}
     <HouseShell />
     <Dining gathering={gathering} inspect={() => select('dining-table')} activate={() => activate('dining-table')} />
     <Shelves x={-7.35} z={-4.60} />
@@ -194,7 +241,7 @@ export default function BagEndInterior({ exhibits, select, activate, selected, p
     {[-1.94,-.46].map(x => <Timber key={x} at={[x,.50,2.41]} size={[.17,.95,.87]} color={walnut} />)}
     <Timber at={[6.37,.73,1.76]} size={[.94,.18,.83]} color={honey} />
     <Timber at={[6.37,.44,1.76]} size={[.24,.75,.24]} color={walnut} />
-    <pointLight position={[-5.5,3.36,-3.3]} intensity={22} color="#ffc681" distance={10} />
+    <pointLight position={[-5.5,3.36,-3.3]} intensity={morning ? 23 : 19} color={morning ? "#ffe0ad" : "#ffc681"} distance={10} />
     <pointLight position={[.25,3.06,.34]} intensity={12} color="#ffc483" distance={9} />
     {exhibits.map(item => {
       const pos = interiorAnchors[item.id as keyof typeof interiorAnchors]
@@ -210,6 +257,6 @@ export default function BagEndInterior({ exhibits, select, activate, selected, p
         </group>}
       </group>
     })}
-    <Hotspots portal={portal} entries={entries} selected={selected} select={select} activate={activate} />
+    {mode !== 'walk' && <Hotspots portal={portal} entries={entries} selected={selected} select={select} activate={activate} />}
   </>
 }

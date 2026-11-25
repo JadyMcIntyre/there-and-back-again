@@ -1,10 +1,15 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { Compass, LocateFixed, Minus, Plus, CircleHelp } from 'lucide-react'
-import { Component, Suspense, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { Compass, LocateFixed, Minus, Plus, CircleHelp, Mouse } from 'lucide-react'
+import { Component, Suspense, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { ACESFilmicToneMapping, type Vector3Tuple } from 'three'
-import type { Atlas } from '../content/spoilers'
+import { comparePosition, type Atlas } from '../content/spoilers'
 import type { Exhibit } from '../content/schema'
-import { scenes, type SceneId } from '../scenes/registry'
+import { isInterior, sceneAnchors, scenes, type SceneId } from '../scenes/registry'
+import { at } from '../content/schema'
+import type { LocationMode } from '../scenes/sceneProps'
+import { WalkRig, type WalkControls, type WalkFeedback } from './walk/WalkRig'
+import { withExhibitObstacles } from './walk/navigation'
+import type { HotspotEntry } from './Hotspots'
 import AtlasWorld from './AtlasWorld'
 import { atlasComposition, portraitAtlasComposition, CameraRig, type CameraHandle, type CameraPose, type CameraAction } from './CameraRig'
 
@@ -20,21 +25,21 @@ export function useMedia(query: string) {
   return matches
 }
 
-function Lighting({ scene, compact, interior }: { scene: boolean, compact: boolean, interior: boolean }) {
-  const bounds = scene ? 15 : 72
+function Lighting({ scene, compact, interior, enclosed, morning }: { scene: boolean, compact: boolean, interior: boolean, enclosed: boolean, morning: boolean }) {
+  const bounds = scene ? 16 : 72
   const light: Vector3Tuple = scene ? [-8, 15, 10] : [-53, 82, 36]
   return <>
-    <hemisphereLight args={[scene ? '#f5e7c8' : '#fff2d8', scene ? '#99896d' : '#8b8874', interior ? 1.22 : scene ? 1.55 : 1.78]} />
-    <directionalLight position={light} color={scene ? '#ffdcaa' : '#fff0cf'} intensity={interior ? 1.85 : scene ? 2.5 : 2.45} castShadow
+    <hemisphereLight args={[scene ? '#f5e7c8' : '#fff2d8', scene ? '#99896d' : '#8b8874', enclosed ? 1.15 : interior ? 1.22 : scene ? 1.36 : 1.78]} />
+    <directionalLight position={light} color={scene ? (morning ? '#fff0ce' : '#ffdcaa') : '#fff0cf'} intensity={enclosed ? .40 : interior ? 1.85 : scene ? 2.4 : 2.45} castShadow
       shadow-mapSize-width={compact ? 1024 : 2048} shadow-mapSize-height={compact ? 1024 : 2048}
       shadow-camera-top={bounds} shadow-camera-bottom={-bounds * 0.85}
       shadow-camera-left={-bounds} shadow-camera-right={bounds}
       shadow-camera-near={0.5} shadow-camera-far={scene ? 52 : 233}
       shadow-bias={scene ? -0.0002 : -0.00026} shadow-normalBias={scene ? 0.035 : 0.16} shadow-radius={3} />
     <directionalLight position={[14, 9, -18]} color="#a9c4c2" intensity={scene ? 0.54 : 0.44} />
-    <mesh receiveShadow rotation-x={-Math.PI / 2} position-y={scene ? -1.33 : -4.46}>
+    {(!scene || interior && !enclosed) && <mesh receiveShadow rotation-x={-Math.PI / 2} position-y={scene ? -1.33 : -4.46}>
       <planeGeometry args={scene ? [80, 80] : [390, 390]} /><shadowMaterial transparent opacity={0.22} depthWrite={false} />
-    </mesh>
+    </mesh>}
   </>
 }
 
@@ -88,7 +93,7 @@ export function CameraButtons({ camera, atlas }: { camera: RefObject<CameraHandl
 }
 
 export default function Viewport({ atlas, selected, select, activate, scene, exhibits, inspect, openExhibit, exhibit, doorOpen, camera,
-  initial, arriving, locked, panelOpen, immersive, reduced, ready, fail, active }: {
+  initial, arriving, locked, panelOpen, immersive, reduced, ready, fail, active, mode, modalOpen, traverse }: {
   atlas: Atlas
   selected?: string
   select: (id: string) => void
@@ -109,40 +114,78 @@ export default function Viewport({ atlas, selected, select, activate, scene, exh
   reduced: boolean
   ready: () => void
   fail: () => void
+  mode: LocationMode
+  modalOpen: boolean
+  traverse?: () => void
 }) {
   const labelPortal = useRef<HTMLDivElement>(null)
+  const surface = useRef<HTMLDivElement>(null)
+  const walkControls = useRef<WalkControls | null>(null)
+  const [walk, report] = useState<WalkFeedback>({ locked: false, fallback: false })
   const compact = useMedia('(max-width: 760px)')
   const config = scene ? scenes[scene] : undefined
   const Scene = config?.World
-  const composition = config?.camera ?? (compact ? portraitAtlasComposition : atlasComposition)
+  const composition = mode === 'dollhouse' && scene === 'bag-end-interior' ? scenes[scene].dollhouse
+    : config?.camera ?? (compact ? portraitAtlasComposition : atlasComposition)
+  const interior = scene ? isInterior(scene) : false
+  const morning = comparePosition(atlas.cutoff, at(1, 2)) < 0
+  const paused = locked || !active || modalOpen || panelOpen
+  const visibleIds = exhibits.map(item => item.id).join(' ')
+  const walkPlan = useMemo(() => config && withExhibitObstacles(config.walk, visibleIds.split(' ')), [config, visibleIds])
+  const walking = !!walkPlan && mode === 'walk'
+  const targetEntries: HotspotEntry[] = scene ? exhibits.map(item => ({
+    id: item.id, name: item.name, position: sceneAnchors(scene)[item.id],
+  })).filter(entry => !!entry.position) : []
+  if (interior && traverse) targetEntries.push({ id: 'exit', name: 'Return outside', position: [1.52,1.52,5.14] })
+  const target = targetEntries.find(entry => entry.id === walk.target)
+  const action = target?.id === 'green-door' && traverse ? 'Enter Bag End'
+    : target?.id === 'exit' ? target.name : target ? 'Inspect ' + target.name : undefined
+  useEffect(() => {
+    if (walking && !paused) surface.current?.focus({ preventScroll: true })
+  }, [walking, paused])
   const keyActions: Partial<Record<string, CameraAction>> = {
     ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
     '+': 'in', '=': 'in', '-': 'out', Home: 'home',
   }
-  return <div tabIndex={locked ? -1 : 0} onPointerDownCapture={event => {
+  return <div ref={surface} tabIndex={locked ? -1 : 0} onPointerDownCapture={event => {
     if (event.target instanceof HTMLCanvasElement && !locked) event.currentTarget.focus({ preventScroll: true })
   }} onKeyDown={event => {
     const action = keyActions[event.key]
-    if (locked || event.target !== event.currentTarget || !action || event.ctrlKey || event.metaKey) return
+    if (walking || locked || event.target !== event.currentTarget || !action || event.ctrlKey || event.metaKey) return
     event.preventDefault()
     void camera.current?.move(action)
-  }} className={`viewport ${Scene ? 'garden-viewport' : ''} ${scene === 'bag-end-interior' ? 'interior-viewport' : ''}`} aria-label={scene === 'bag-end-interior' ? 'Interactive Bag End interior' : Scene ? 'Interactive Bag End diorama' : 'Interactive atlas map'}>
-    <div className="map-grid" aria-hidden />
+  }} className={`viewport ${Scene ? 'garden-viewport' : ''} ${scene === 'bag-end-interior' ? 'interior-viewport' : ''}`} aria-label={scene === 'bag-end-interior' ? 'Interactive Bag End interior' : Scene ? 'Interactive Bag End garden' : 'Interactive atlas map'}>
+    {!Scene && <div className="map-grid" aria-hidden />}
     <div ref={labelPortal} className="world-label-portal" inert={locked || undefined} />
     <ViewErrorBoundary fail={fail}>
-      <Canvas orthographic camera={{ position: composition.eye, near: 0.1, far: 430 }}
+      <Canvas orthographic={!Scene} camera={{ position: Scene ? undefined : composition.eye, near: Scene ? .065 : .1, far: 430, fov: 51 }}
         dpr={compact ? [1, 1.25] : [1, 1.65]} shadows frameloop="demand"
         gl={{ antialias: true, alpha: true, toneMapping: ACESFilmicToneMapping }}
         fallback={<p className="view-status" role="status">The 3D view needs WebGL. Explore with the field notes.</p>}>
-        <Lighting scene={!!Scene} interior={scene === 'bag-end-interior'} compact={compact} />
-        <CameraRig scene={!!Scene} composition={composition} compact={compact} panelOpen={compact ? panelOpen : !immersive} locked={locked}
-          reduced={reduced} handle={camera} initial={initial} arriving={arriving} />
+        <Lighting scene={!!Scene} interior={interior} compact={compact} enclosed={interior && mode !== 'dollhouse'} morning={morning} />
+        {walking && walkPlan ? <WalkRig plan={walkPlan} initial={initial} paused={paused} viewport={surface} handle={camera}
+          controls={walkControls} report={report} entries={targetEntries} doorOpen={doorOpen} traverse={traverse}
+          interact={id => {
+            if ((id === 'exit' || id === 'green-door') && traverse) traverse()
+            else inspect(id)
+          }} /> : <CameraRig key={mode} scene={!!Scene} composition={composition} compact={compact} panelOpen={compact ? panelOpen : !immersive} locked={locked}
+          reduced={reduced} handle={camera} initial={initial} arriving={arriving} />}
         <Suspense fallback={null}>
-          {Scene ? <Scene portal={labelPortal} compact={compact} exhibits={exhibits} selected={exhibit} select={id => { if (!locked) inspect(id) }} activate={id => { if (!locked) openExhibit(id) }} doorOpen={doorOpen} reduced={reduced} active={active} />
+          {Scene ? <Scene mode={mode} morning={morning} portal={labelPortal} compact={compact} exhibits={exhibits} selected={exhibit} select={id => { if (!locked) inspect(id) }} activate={id => { if (!locked) openExhibit(id) }} doorOpen={doorOpen} reduced={reduced} active={active} />
             : <AtlasWorld portal={labelPortal} atlas={atlas} compact={compact} reduced={reduced} selected={selected} select={id => { if (!locked) select(id) }} activate={id => { if (!locked) activate(id) }} focus={point => { if (!locked) void camera.current?.focus(point) }} />}
           <FirstFrame ready={ready} />
         </Suspense>
       </Canvas>
     </ViewErrorBoundary>
+    {walking && !paused && <div className="walk-chrome" aria-label="Walk controls">
+      <div className="walk-reticle" aria-hidden="true" />
+      {action && <button className="walk-interact" type="button" onClick={() => walkControls.current?.interact()}>
+        <kbd>E</kbd> {action}
+      </button>}
+      <div className="walk-guide">
+        {!walk.locked && !walk.fallback && <button type="button" onClick={() => walkControls.current?.captureMouse()}><Mouse size={14} /> Capture mouse</button>}
+        <span>{walk.locked ? 'Esc releases mouse' : 'Drag to look'} <b>·</b> WASD or arrows to walk <b>·</b> <kbd>R</kbd> reset</span>
+      </div>
+    </div>}
   </div>
 }

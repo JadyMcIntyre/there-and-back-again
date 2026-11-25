@@ -34,15 +34,15 @@ export function Modal({ name, close, children, initialFocus }: { name: string, c
 
 type Result = { id: string, title: string, subtitle?: string, group: string, icon: LucideIcon, run: () => void, hint?: string }
 
-export function CommandPalette({ atlas, world, close, navigate, visit, actions, canControl }: {
+export function CommandPalette({ atlas, world, close, navigate, visit, actions, canControl, canWalk }: {
   atlas: Atlas, world: Atlas, close: () => void, navigate: (view: 'atlas' | 'journal', id: string) => void,
-  visit: (id: string) => void, actions: ShortcutActions, canControl: boolean
+  visit: (id: string) => void, actions: ShortcutActions, canControl: boolean, canWalk: boolean
 }) {
   const [query, setQuery] = useState('')
   const buttons = useRef<Array<HTMLButtonElement | null>>([])
   const input = useRef<HTMLInputElement>(null)
   const needle = query.trim().toLowerCase()
-  const commands = (Object.keys(shortcuts) as Shortcut[]).filter(id => id !== 'palette'
+  const commands = (Object.keys(shortcuts) as Shortcut[]).filter(id => id !== 'palette' && (id !== 'walk' || canWalk)
     && (canControl || !['focus', 'reset', 'immersive'].includes(id)))
   const entries: Result[] = atlas.searchResults(query).map(({ item, score }) => {
     const place = 'region' in item
@@ -113,7 +113,9 @@ export function ShortcutDialog({ close }: { close: () => void }) {
     <dl className="shortcut-guide">
       {Object.entries(shortcuts).map(([id, entry]) => <div key={id}><dt>{entry.label}</dt><dd><kbd>{entry.hint}</kbd></dd></div>)}
       <div><dt>Explore unlocked chapters from the chapter trail</dt><dd><kbd>← / →</kbd></dd></div>
-      <div><dt>Dismiss a dialog or hotspot tooltip</dt><dd><kbd>Esc</kbd></dd></div>
+      <div><dt>Move in Walk mode</dt><dd><kbd>W A S D</kbd></dd></div>
+      <div><dt>Interact with a nearby discovery</dt><dd><kbd>E</kbd></dd></div>
+      <div><dt>Release mouse or dismiss a dialog</dt><dd><kbd>Esc</kbd></dd></div>
     </dl>
   </Modal>
 }

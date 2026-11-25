@@ -12,8 +12,8 @@ export const exteriorPlacements = {
   gandalf: { base: gardenPosition(2.98, 2.85), turn: -.15 },
 }
 export const exteriorAnchors: Record<string, Vector3Tuple> = {
-  bilbo: [-2.46, exteriorPlacements.bilbo.base[1] + 1.91, 2.60],
-  gandalf: [2.98, exteriorPlacements.gandalf.base[1] + 2.77, 3.04],
+  bilbo: [-2.46, exteriorPlacements.bilbo.base[1] + 1.30, 2.89],
+  gandalf: [2.98, exteriorPlacements.gandalf.base[1] + 1.55, 3.43],
   'green-door': [0, 1.69, 1.39],
 }
 

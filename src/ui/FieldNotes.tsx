@@ -53,8 +53,8 @@ export function AtlasPanel({ atlas, selected, pick, focus, href, chapter, close 
   </aside>
 }
 
-export function ScenePanel({ exhibits, selected, inspect, doorOpen, toggle, close, href, interior, enter, moment }: {
-  exhibits: Exhibit[], selected?: string, inspect: (id: string) => void, doorOpen: boolean, toggle: () => void, close: () => void, href: LinkTo, interior: boolean, enter?: string, moment?: { quiet: boolean, choose: (quiet: boolean) => void }
+export function ScenePanel({ exhibits, selected, inspect, doorOpen, toggle, close, href, interior, enter }: {
+  exhibits: Exhibit[], selected?: string, inspect: (id: string) => void, doorOpen: boolean, toggle: () => void, close: () => void, href: LinkTo, interior: boolean, enter?: () => void
 }) {
   const current = exhibits.find(item => item.id === selected)
   const canOpen = !interior && current?.id === 'green-door'
@@ -63,17 +63,14 @@ export function ScenePanel({ exhibits, selected, inspect, doorOpen, toggle, clos
     <div className="field-content">
       <span className="field-kicker">{current?.subtitle ?? 'Chapter I'}</span>
       <h2>{current?.name ?? (interior ? 'Hearth and hall' : 'At the doorstep')}</h2>
-      {current ? <FactText facts={current.facts.filter(fact => fact.reveal.chapter === 1)} /> : interior ? <p>Explore the panelled passage, the laid table and the fire. The cutaway imagines how the rooms might fit together.</p>
+      {current ? <FactText facts={current.facts.filter(fact => fact.reveal.chapter === 1)} /> : interior ? <p>Explore the panelled passage, the laid table and the fire. The room arrangement is an interpretation of the book’s description.</p>
         : <p>Look around the garden and inspect the people and objects you’ve discovered in the book.</p>}
-      {canOpen && <button type="button" className="gold-button door-button" onClick={toggle}>{doorOpen ? 'Close the door' : 'Open the door'} <DoorOpen size={16} /></button>}
-      {!interior && doorOpen && enter && <a className="gold-button door-button" href={enter}>Enter Bag End <ArrowRight size={16} /></a>}
+      {canOpen && <>
+        {enter && <button type="button" className="gold-button door-button" onClick={enter}>Enter Bag End <ArrowRight size={16} /></button>}
+        <button type="button" className="field-secondary door-button" onClick={toggle}>{doorOpen ? 'Close the door' : 'Peek inside'} <DoorOpen size={16} /></button>
+      </>}
     </div>
     {current && <a className="field-profile-link" href={href('journal', current.id)}>Read journal entry <ArrowRight size={14} /></a>}
-    {moment && <label className="scene-moment">Bag End moment
-      <select value={moment.quiet ? 'morning' : 'gathering'} onChange={event => moment.choose(event.target.value === 'morning')}>
-        <option value="morning">Quiet morning</option><option value="gathering">Unexpected gathering</option>
-      </select>
-    </label>}
     <div className="places-list exhibit-list">
       {exhibits.map(item => {
         const Icon = item.kind === 'character' ? UserRound : Package

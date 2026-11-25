@@ -222,15 +222,36 @@ export default function App() {
     else setFocus({ id, time: performance.now() })
   }
 
+  function enterBagEnd() {
+    if (desired !== 'bag-end' || !scenePlace(atlas, 'bag-end-interior')) return
+    setDoorOpen(true)
+    setInspectId(undefined)
+    navigateTo(href('scene', 'bag-end-interior'))
+  }
+
+  function traverse(scene: Exclude<World, 'atlas'>) {
+    if (scene !== desired) return
+    if (scene === 'bag-end') enterBagEnd()
+    else if (scenePlace(atlas, 'bag-end')) {
+      setInspectId(undefined)
+      navigateTo(href('scene', 'bag-end'))
+    }
+  }
+
   function openExhibit(id: string) {
     const place = scenePlace(atlas, desired)
-    if (desired !== 'atlas' && atlas.exhibits.some(item => item.id === id && item.location === place?.id)
-      && scenes[desired].exhibits.includes(id)) navigateTo(href('journal', id))
+    if (desired === 'atlas' || !atlas.exhibits.some(item => item.id === id && item.location === place?.id)
+      || !scenes[desired].exhibits.includes(id)) return
+    if (id === 'green-door') enterBagEnd()
+    else navigateTo(href('journal', id))
   }
+
+  const beginWalk = useCallback(() => setNotesOpen(false), [])
 
   const actions: ShortcutActions = {
     palette: () => openDialog('search'),
     focus: () => worldShortcuts.current?.focus(),
+    walk: () => worldShortcuts.current?.walk?.(),
     reset: () => worldShortcuts.current?.reset(),
     immersive: () => setImmersive(value => !value),
     atlas: () => navigateTo(href('atlas')),
@@ -240,6 +261,8 @@ export default function App() {
   }
   useShortcuts(actions, !!dialog, worldShortcuts)
 
+  const momentsKnown = knowledge.exhibits.some(item => item.id === 'thror-map')
+  const morning = comparePosition(atlas.cutoff, at(1,2)) < 0
   const trail = <Timeline progress={progress} exploration={exploration} chapters={chapters} select={setTrail} reset={() => setTrail()} />
 
   return <div className={`atlas-app ${inJournal ? 'journal-view' : 'world-view'} ${immersive ? 'is-immersive' : ''}`}>
@@ -259,8 +282,8 @@ export default function App() {
       </> :
         <WorldStage desired={desired} atlas={atlas} selected={selected} select={selectPlace} activate={activatePlace} openExhibit={openExhibit} shortcuts={worldShortcuts}
           inspect={inspect} exhibit={inspectId} doorOpen={doorOpen} focus={focus} panelOpen={scenePanelOpen} immersive={immersive}
-          atlasPose={atlasPose} cancel={cancel}>
-          {(shown) => {
+          atlasPose={atlasPose} cancel={cancel} modalOpen={!!dialog} traverse={traverse} onWalkStart={beginWalk}>
+          {(shown, phase, view) => {
             const place = shown !== 'atlas' ? scenePlace(atlas, shown) : undefined
             const exhibits = place && shown !== 'atlas' ? atlas.exhibits.filter(item => item.location === place.id && scenes[shown].exhibits.includes(item.id)) : []
             const interior = shown === 'bag-end-interior'
@@ -275,6 +298,25 @@ export default function App() {
                   {exploration ? <>Exploring Chapter {roman(exploration.chapter)}{chapterContext && <> <b>·</b> {chapterContext.title}</>}</>
                     : place ? `${place.region} · Chapter ${roman(place.reveal.chapter)}` : `${hobbit.title} · ${enhancedEdition.name}`}
                 </div>}</div>
+                {place && <div className="location-modes" role="group" aria-label="Location view">
+                  <button type="button" disabled={phase !== 'idle'} aria-pressed={view.mode === 'explore'} onClick={() => view.choose('explore')}>Explore</button>
+                  {view.canWalk && <button type="button" title="Walk (V)" disabled={phase !== 'idle'} aria-pressed={view.mode === 'walk'} onClick={() => view.choose('walk')}>Walk</button>}
+                  {interior && <button type="button" disabled={phase !== 'idle'} aria-pressed={view.mode === 'dollhouse'} onClick={() => view.choose('dollhouse')}>Dollhouse</button>}
+                  {momentsKnown && phase === 'idle' && <details className="location-moments">
+                    <summary>Moments</summary>
+                    <label>Bag End moment
+                      <select value={morning ? 'morning' : 'gathering'} onChange={event => {
+                        const gathering = progress.chapter === 1 ? progress : at(1,completeEvent)
+                        const target = event.target.value === 'morning' ? at(1,1) : gathering
+                        navigateTo(atlasLink('scene', shown, comparePosition(target,progress) < 0 ? target : undefined))
+                        event.currentTarget.closest('details')?.removeAttribute('open')
+                      }}>
+                        <option value="morning">Quiet morning</option>
+                        <option value="gathering">Unexpected gathering</option>
+                      </select>
+                    </label>
+                  </details>}
+                </div>}
               </div>
               <div className="world-tools">
                 <button type="button" className="world-tool" aria-label={immersive ? 'Exit immersive mode' : 'Enter immersive mode'}
@@ -283,20 +325,13 @@ export default function App() {
                 </button>
               </div>
               {scenePanelOpen ? <div className="field-overlay" id="field-notes">
-                {place ? <ScenePanel interior={interior} moment={knowledge.exhibits.some(item => item.id === 'thror-map') && shown !== 'atlas' ? {
-                  quiet: comparePosition(atlas.cutoff, at(1, 2)) < 0,
-                  choose(quiet) {
-                    const gathering = progress.chapter === 1 ? progress : at(1, completeEvent)
-                    const target = quiet ? at(1, 1) : gathering
-                    navigateTo(atlasLink('scene', shown, comparePosition(target, progress) < 0 ? target : undefined))
-                  },
-                } : undefined} enter={canEnter ? href('scene', 'bag-end-interior') : undefined} exhibits={exhibits} selected={inspectId} inspect={inspect} doorOpen={doorOpen}
+                {place ? <ScenePanel interior={interior} enter={canEnter && phase === 'idle' ? enterBagEnd : undefined} exhibits={exhibits} selected={inspectId} inspect={inspect} doorOpen={doorOpen}
                   toggle={() => setDoorOpen(value => !value)} close={closeNotes} href={href} />
                   : <AtlasPanel atlas={atlas} selected={selected} pick={id => { selectPlace(id); setFocus({ id, time: performance.now() }) }}
                     focus={id => setFocus({ id, time: performance.now() })} href={href} chapter={chapterContext} close={closeNotes} />}
               </div> : !immersive && <button type="button" className="notes-peek" onClick={() => setNotesOpen(true)}
                 aria-label="Open field notes" aria-expanded={false}><NotebookPen size={17} /><span>{place?.name ?? atlas.landmarks.find(entry => entry.id === selected)?.name ?? 'Discovered places'}</span><b>Field notes</b></button>}
-              {!immersive && trail}
+              {!immersive && view.mode !== 'walk' && trail}
               {shown === 'atlas' && !immersive && <div className="map-legend">
                 {atlas.routes.length > 0 && <><span className="route-sample" /> Company’s route <span className="legend-divider" /></>}
                 <span className="mist-sample" /> Discovery mist
@@ -306,7 +341,7 @@ export default function App() {
         </WorldStage>}
     </main>
     {dialog === 'search' && <CommandPalette atlas={knowledge} world={atlas} close={closePalette} navigate={searchNavigate}
-      visit={id => navigateTo(href('scene', id))} actions={actions} canControl={!!worldShortcuts.current} />}
+      visit={id => navigateTo(href('scene', id))} actions={actions} canControl={!!worldShortcuts.current} canWalk={!!worldShortcuts.current?.walk} />}
     {dialog === 'help' && <ShortcutDialog close={closePalette} />}
     {dialog === 'bookmark' && <BookmarkDialog chapters={chapters} close={() => setDialog(undefined)}
       saved={() => { navigateTo(atlasLink('atlas')); setFocus(undefined); setDialog(undefined) }} />}
