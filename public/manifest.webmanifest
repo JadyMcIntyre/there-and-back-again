@@ -1,0 +1,11 @@
+{
+  "name": "There & Back Again",
+  "short_name": "Reader’s Atlas",
+  "description": "A reading companion for The Hobbit.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#efe7d5",
+  "background_color": "#efe7d5",
+  "icons": [{ "src": "/atlas-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
